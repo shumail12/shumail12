@@ -1,0 +1,132 @@
+{
+  "project_context": {
+    "app_type": "dashboard",
+    "industry": "auto transport brokerage CRM",
+    "emotion_and_vibe": "Authority, Precision, Efficiency, Command-Center. The UI must feel like a high-end logistics terminal—clean, legible, and data-dense.",
+    "theme_preference": "Light theme preferred, optimized for brightly lit office environments."
+  },
+  "design_system": {
+    "theme_archetype": "Swiss & High-Contrast mixed with The Performance Pro. Prioritize structural grayscale, high-legibility, and functional color coding.",
+    "colors": {
+      "background": {
+        "app": "bg-slate-50 (#F8FAFC) - tinted light gray to prevent eye strain",
+        "surface": "bg-white (#FFFFFF) - for clear separation of content",
+        "sidebar": "bg-slate-900 (#0F172A) - dark sidebar for command-center focus"
+      },
+      "text": {
+        "primary": "text-slate-900 (#0F172A) - near black for maximum contrast",
+        "secondary": "text-slate-500 (#64748B) - for metadata and table headers",
+        "sidebar_text": "text-slate-300 (#CBD5E1)"
+      },
+      "brand": {
+        "primary": "bg-blue-600 (#2563EB) - Trustworthy blue for primary actions",
+        "primary_hover": "hover:bg-blue-700 (#1D4ED8)"
+      },
+      "status_system": {
+        "info": "bg-blue-100 text-blue-700 (for leads and quotes)",
+        "success": "bg-emerald-100 text-emerald-700 (for live orders, delivered)",
+        "warning": "bg-amber-100 text-amber-800 (for dispatch pending)",
+        "danger": "bg-rose-100 text-rose-700 (for urgent, delayed, or unpaid)"
+      },
+      "forbidden_colors": [
+        "Teal Green",
+        "Teal Blue",
+        "#1B93A4"
+      ]
+    },
+    "typography": {
+      "strategy": "Swiss Brutalist (Tech/SaaS variant) - Radical legibility for data.",
+      "headings": {
+        "font": "Manrope",
+        "classes": "font-bold tracking-tight text-slate-900",
+        "sizes": "text-2xl to text-4xl"
+      },
+      "body": {
+        "font": "IBM Plex Sans",
+        "classes": "text-base leading-relaxed text-slate-700"
+      },
+      "data_and_metrics": {
+        "font": "JetBrains Mono (or similar monospaced)",
+        "classes": "tracking-tighter font-medium text-sm",
+        "usage": "Use for Quote IDs, VIN numbers, Tracking Numbers, Prices, Dates."
+      },
+      "forbidden_fonts": ["Space Grotesk", "Inter (for headings)"]
+    },
+    "spacing_and_layout": {
+      "strategy": "High Density Grid (For Dashboards / Analytics). Density, Data Correlation, Scanability.",
+      "grid_system": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 or grid-cols-12 for complex views. Tight gaps (gap-4 or gap-6).",
+      "padding": "Generous internal padding for structural containers (p-6 or p-8). Compact padding for data cells (px-4 py-3).",
+      "alignment": "Strict left-alignment for dense content, tables, and forms. Center only for empty states."
+    },
+    "surface_and_borders": {
+      "strategy": "Grid Borders (The Technical Look). Expose the skeleton.",
+      "cards": "Flat background (bg-white), 1px subtle border (border-slate-200), subtle soft shadow (shadow-sm). No heavy drop shadows.",
+      "radius": "Subtle roundness, max 8px (rounded-lg) for outer containers. rounded-md for buttons/inputs."
+    }
+  },
+  "component_library": {
+    "forms": "Use Shadcn Form components. Forms must look highly structured. Stacked labels with crisp inputs.",
+    "tables": "MANDATORY: High-density data tables. Implement sticky headers, hover state on rows (hover:bg-slate-50), and clear pagination.",
+    "badges": "Use rounded-md badges with soft backgrounds and bold text for status indicators.",
+    "buttons": "Rectangular with slight radius (rounded-md). Clear hover states."
+  },
+  "motion_and_interactions": {
+    "hover_states": "All interactive elements MUST have explicit hover states. Table rows highlight, buttons slightly darken.",
+    "transitions": "Use specific transitions: 'transition-colors duration-200', 'transition-transform duration-200 ease-out'. DO NOT use 'transition-all'.",
+    "micro_interactions": "Add a pulsing green dot animation for 'Live Orders' status to indicate real-time tracking.",
+    "accessibility": "Respect prefers-reduced-motion."
+  },
+  "visual_assets": {
+    "images": [
+      {
+        "url": "https://images.pexels.com/photos/93398/pexels-photo-93398.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Authentication/Login Background",
+        "description": "A semi-truck traveling along a highway with snow-capped mountains. Ideal for the left or right split-screen of the login/register page."
+      },
+      {
+        "url": "https://images.pexels.com/photos/7519246/pexels-photo-7519246.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Empty State / Dashboard Banner",
+        "description": "Aerial shot of cargo containers. Good for empty states in the tracking or orders section."
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "usage": "Use stroke-width 1.5 or 2 for crispness. Use icons in sidebars, table actions, and metric cards."
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure minimum 4.5:1 ratio for normal text. Avoid light gray text on white backgrounds.",
+    "testing": "All interactive and key informational elements MUST include a 'data-testid' attribute (e.g., data-testid='create-quote-btn').",
+    "focus": "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+  },
+  "general_ui_ux_guidelines": [
+    "Prioritize optical alignment over geometric alignment. Data tables should have right-aligned numbers/prices and left-aligned text.",
+    "Design for scale: assume the user has 100+ active orders. Tables need to be scan-friendly.",
+    "Never use full-screen gradients. Use solid structural colors to guide the user's eye.",
+    "Dashboards should have a fixed sidebar and a scrollable main content area with a sticky header.",
+    "Always apply a `hover:text-*` explicitly to prevent color drop-off."
+  ],
+  "instructions_to_main_agent": {
+    "setup": "Use Shadcn UI with standard .js/.jsx extensions. Customize the `tailwind.config.js` with the specified fonts (Manrope, IBM Plex Sans).",
+    "structure": "Build a master layout with a Sidebar Navigation and a Topbar (for user profile and notifications).",
+    "key_views": "1. Dashboard Metrics (Bento grid), 2. High-density DataTable for Leads/Orders, 3. Quote Calculator Form.",
+    "data_test_ids": "Enforce `data-testid` on all buttons, links, form inputs, and major containers."
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) where applicable.",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container, ie do not add `.App { text-align: center; }` in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Components MUST use named exports. Pages MUST use default exports.",
+    "Use `sonner` for toasts. Sonner component are located in `/app/frontend/src/components/ui/sonner.jsx` or `.js`."
+  ]
+}
