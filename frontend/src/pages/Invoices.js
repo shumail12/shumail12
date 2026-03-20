@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getInvoices, createInvoice, updateInvoice, getOrders, getQuotes } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, Receipt, DollarSign, Calendar, CheckCircle } from 'lucide-react';
+import { Plus, Search, Edit, Receipt, DollarSign, Calendar, CheckCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusOptions = ['unpaid', 'paid', 'overdue'];
@@ -177,6 +178,7 @@ const InvoiceForm = ({ invoice, orders, quotes, onSubmit, onCancel }) => {
 };
 
 const Invoices = () => {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [orders, setOrders] = useState([]);
   const [quotes, setQuotes] = useState([]);
@@ -409,6 +411,15 @@ const Invoices = () => {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/invoices/${invoice.id}`)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            data-testid={`view-invoice-${invoice.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
                           {invoice.status !== 'paid' && (
                             <Button
                               variant="ghost"

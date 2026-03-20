@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getOrders, createOrder, updateOrder, getQuotes, getCarriers } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, Package, MapPin, Calendar, Truck } from 'lucide-react';
+import { Plus, Search, Edit, Package, MapPin, Calendar, Truck, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusOptions = ['pending', 'assigned', 'in_transit', 'delivered', 'cancelled'];
@@ -167,6 +168,7 @@ const OrderForm = ({ order, quotes, carriers, onSubmit, onCancel }) => {
 };
 
 const Orders = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [carriers, setCarriers] = useState([]);
@@ -360,6 +362,15 @@ const Orders = () => {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/orders/${order.id}`)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            data-testid={`view-order-${order.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

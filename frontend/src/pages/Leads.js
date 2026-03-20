@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getLeads, createLead, updateLead, deleteLead } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, Trash2, Phone, Mail, Car } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Phone, Mail, Car, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 const vehicleTypes = ['Sedan', 'SUV', 'Truck', 'Van', 'Motorcycle', 'Coupe', 'Convertible', 'Other'];
@@ -179,6 +180,7 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
 };
 
 const Leads = () => {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -359,6 +361,15 @@ const Leads = () => {
                     </td>
                     <td>
                       <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/leads/${lead.id}`)}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          data-testid={`view-lead-${lead.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

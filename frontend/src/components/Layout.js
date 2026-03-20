@@ -10,22 +10,35 @@ import {
   Receipt,
   Settings,
   LogOut,
-  ChevronRight
+  ChevronRight,
+  UserCog,
+  Building
 } from 'lucide-react';
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Quotes', href: '/quotes', icon: FileText },
-  { name: 'Orders', href: '/orders', icon: Package },
-  { name: 'Dispatch', href: '/dispatch', icon: Truck },
-  { name: 'Invoices', href: '/invoices', icon: Receipt },
-  { name: 'Settings', href: '/settings', icon: Settings },
-];
+const getNavigation = (isSuperAdmin) => {
+  const baseNav = [
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Leads', href: '/leads', icon: Users },
+    { name: 'Quotes', href: '/quotes', icon: FileText },
+    { name: 'Orders', href: '/orders', icon: Package },
+    { name: 'Dispatch', href: '/dispatch', icon: Truck },
+    { name: 'Invoices', href: '/invoices', icon: Receipt },
+  ];
+
+  if (isSuperAdmin) {
+    baseNav.push({ name: 'Users', href: '/users', icon: UserCog });
+  }
+
+  baseNav.push({ name: 'Settings', href: '/settings', icon: Settings });
+
+  return baseNav;
+};
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const isSuperAdmin = user?.role === 'superadmin';
+  const navigation = getNavigation(isSuperAdmin);
 
   const handleLogout = () => {
     logout();
@@ -39,7 +52,10 @@ export const Sidebar = () => {
         <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
           <Truck className="w-5 h-5 text-white" />
         </div>
-        <span className="text-lg font-heading font-bold text-white">QVIK TMS</span>
+        <div>
+          <span className="text-lg font-heading font-bold text-white">Breamway</span>
+          <span className="text-blue-400 text-sm">.com</span>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -52,7 +68,7 @@ export const Sidebar = () => {
                 className={({ isActive }) =>
                   `sidebar-link ${isActive ? 'active' : ''}`
                 }
-                data-testid={`nav-${item.name.toLowerCase()}`}
+                data-testid={`nav-${item.name.toLowerCase().replace(' ', '-')}`}
               >
                 <item.icon className="w-5 h-5" />
                 <span className="flex-1">{item.name}</span>
@@ -73,7 +89,17 @@ export const Sidebar = () => {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{user?.full_name || 'User'}</p>
-            <p className="text-xs text-slate-400 truncate">{user?.role || 'Staff'}</p>
+            <div className="flex items-center gap-1">
+              {user?.role === 'superadmin' && (
+                <span className="text-xs text-rose-400 font-medium">Super Admin</span>
+              )}
+              {user?.role === 'admin' && (
+                <span className="text-xs text-blue-400 font-medium">Admin</span>
+              )}
+              {user?.role === 'staff' && (
+                <span className="text-xs text-slate-400">Staff</span>
+              )}
+            </div>
           </div>
         </div>
         <button
@@ -91,7 +117,7 @@ export const Sidebar = () => {
 
 export const Header = ({ title, children }) => {
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
+    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-30">
       <h1 className="page-title">{title}</h1>
       <div className="flex items-center gap-4">
         {children}

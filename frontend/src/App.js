@@ -8,26 +8,38 @@ import { Toaster } from "./components/ui/sonner";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
+import LeadDetail from "./pages/LeadDetail";
 import Quotes from "./pages/Quotes";
+import QuoteDetail from "./pages/QuoteDetail";
 import Orders from "./pages/Orders";
+import OrderDetail from "./pages/OrderDetail";
 import Dispatch from "./pages/Dispatch";
 import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
 import Settings from "./pages/Settings";
+import Users from "./pages/Users";
 
 // Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="text-center">
+          <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-slate-500">Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requireSuperAdmin && user?.role !== 'superadmin') {
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -40,7 +52,10 @@ const PublicRoute = ({ children }) => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="text-center">
+          <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-slate-500">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -80,6 +95,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/leads/:id"
+        element={
+          <ProtectedRoute>
+            <LeadDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/quotes"
         element={
           <ProtectedRoute>
@@ -88,10 +111,26 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/quotes/:id"
+        element={
+          <ProtectedRoute>
+            <QuoteDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/orders"
         element={
           <ProtectedRoute>
             <Orders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/orders/:id"
+        element={
+          <ProtectedRoute>
+            <OrderDetail />
           </ProtectedRoute>
         }
       />
@@ -108,6 +147,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Invoices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/invoices/:id"
+        element={
+          <ProtectedRoute>
+            <InvoiceDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute requireSuperAdmin>
+            <Users />
           </ProtectedRoute>
         }
       />

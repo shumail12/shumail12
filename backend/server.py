@@ -12,7 +12,6 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from twilio.rest import Client
 
 
 ROOT_DIR = Path(__file__).parent
@@ -25,19 +24,14 @@ db = client[os.environ['DB_NAME']]
 
 # Security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY", "breamway-crm-secret-key-2024")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 security = HTTPBearer()
 
-# Twilio Client (optional - will initialize if credentials provided)
-twilio_client = None
-if os.getenv("TWILIO_ACCOUNT_SID") and os.getenv("TWILIO_AUTH_TOKEN"):
-    twilio_client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-
 # Create the main app without a prefix
-app = FastAPI()
+app = FastAPI(title="Breamway TMS API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -49,10 +43,21 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     full_name: str
-    role: str = "staff"  # admin, staff
+    role: str = "staff"  # superadmin, admin, staff
+    company: str = "Breamway.com"
+    phone: Optional[str] = None
+    is_active: bool = True
 
 class UserCreate(UserBase):
     password: str
+
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 class User(UserBase):
     id: str
@@ -71,12 +76,22 @@ class LeadBase(BaseModel):
     customer_name: str
     phone: str
     email: EmailStr
+    phone2: Optional[str] = None
+    company_name: Optional[str] = None
     vehicle_year: int
     vehicle_make: str
     vehicle_model: str
-    vehicle_type: str  # sedan, suv, truck, motorcycle, etc.
-    status: str = "new"  # new, contacted, quoted, converted, lost
+    vehicle_type: str
+    vehicle_color: Optional[str] = None
+    vehicle_vin: Optional[str] = None
+    vehicle_license: Optional[str] = None
+    vehicle_state: Optional[str] = None
+    running_status: str = "Running"
+    modifications: List[str] = []
+    quote_source: Optional[str] = None
+    status: str = "new"
     notes: Optional[str] = None
+    assigned_to: Optional[str] = None
 
 class LeadCreate(LeadBase):
     pass
@@ -91,14 +106,24 @@ class QuoteBase(BaseModel):
     pickup_location: str
     pickup_city: str
     pickup_state: str
+    pickup_zip: Optional[str] = None
     delivery_location: str
     delivery_city: str
     delivery_state: str
-    distance: float  # in miles
+    delivery_zip: Optional[str] = None
+    pickup_date_from: Optional[datetime] = None
+    pickup_date_to: Optional[datetime] = None
+    delivery_date_from: Optional[datetime] = None
+    delivery_date_to: Optional[datetime] = None
+    distance: float
     vehicle_type: str
+    deposit_fee: float = 150
+    carrier_fee: float = 0
     price: float
-    status: str = "pending"  # pending, approved, rejected, converted
+    service_level: str = "standard"
+    status: str = "pending"
     notes: Optional[str] = None
+    assigned_to: Optional[str] = None
 
 class QuoteCreate(QuoteBase):
     pass
@@ -111,11 +136,20 @@ class Quote(QuoteBase):
 
 class OrderBase(BaseModel):
     quote_id: str
-    status: str = "pending"  # pending, assigned, in_transit, delivered, cancelled
+    status: str = "pending"
     pickup_date: Optional[datetime] = None
     delivery_date: Optional[datetime] = None
+    actual_pickup_date: Optional[datetime] = None
+    actual_delivery_date: Optional[datetime] = None
     carrier_id: Optional[str] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    truck_number: Optional[str] = None
+    trailer_number: Optional[str] = None
+    bol_number: Optional[str] = None
     notes: Optional[str] = None
+    internal_notes: Optional[str] = None
+    assigned_to: Optional[str] = None
 
 class OrderCreate(OrderBase):
     pass
@@ -130,10 +164,20 @@ class CarrierBase(BaseModel):
     name: str
     phone: str
     email: EmailStr
-    mc_number: Optional[str] = None  # Motor Carrier number
+    mc_number: Optional[str] = None
+    dot_number: Optional[str] = None
+    insurance_company: Optional[str] = None
+    insurance_policy: Optional[str] = None
     insurance_expiry: Optional[datetime] = None
+    contact_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
     active_shipments: int = 0
-    status: str = "active"  # active, inactive
+    rating: float = 5.0
+    status: str = "active"
+    notes: Optional[str] = None
 
 class CarrierCreate(CarrierBase):
     pass
@@ -145,11 +189,23 @@ class Carrier(CarrierBase):
 
 class InvoiceBase(BaseModel):
     order_id: str
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_address: Optional[str] = None
+    deposit_amount: float = 0
+    carrier_pay: float = 0
     amount: float
-    status: str = "unpaid"  # unpaid, paid, overdue
+    tax_amount: float = 0
+    discount_amount: float = 0
+    total_amount: float = 0
+    status: str = "unpaid"
     due_date: datetime
     paid_date: Optional[datetime] = None
+    payment_method: Optional[str] = None
+    payment_reference: Optional[str] = None
     notes: Optional[str] = None
+    terms: Optional[str] = None
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -160,6 +216,16 @@ class Invoice(InvoiceBase):
     created_at: datetime
     updated_at: datetime
 
+class CompanySettings(BaseModel):
+    company_name: str = "Breamway.com"
+    company_email: str = "info@breamway.com"
+    company_phone: str = ""
+    company_address: str = ""
+    logo_url: Optional[str] = None
+    primary_color: str = "#2563EB"
+    invoice_terms: str = "Payment due within 30 days"
+    invoice_notes: str = ""
+
 class DashboardStats(BaseModel):
     total_leads: int
     total_quotes: int
@@ -169,6 +235,8 @@ class DashboardStats(BaseModel):
     active_orders: int
     delivered_orders: int
     unpaid_invoices: int
+    total_users: int
+    total_carriers: int
 
 
 # ==================== AUTHENTICATION ====================
@@ -209,37 +277,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise credentials_exception
     return User(**user)
 
-
-# ==================== SMS NOTIFICATIONS ====================
-
-async def send_sms(to_phone: str, message: str):
-    """Send SMS notification via Twilio"""
-    if not twilio_client:
-        logging.warning("Twilio not configured. SMS not sent.")
-        return False
-    
-    try:
-        from_phone = os.getenv("TWILIO_PHONE_NUMBER")
-        if not from_phone:
-            logging.error("TWILIO_PHONE_NUMBER not configured")
-            return False
-        
-        message = twilio_client.messages.create(
-            body=message,
-            from_=from_phone,
-            to=to_phone
-        )
-        logging.info(f"SMS sent: {message.sid}")
-        return True
-    except Exception as e:
-        logging.error(f"Error sending SMS: {str(e)}")
-        return False
+async def require_superadmin(current_user: User = Depends(get_current_user)):
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+    return current_user
 
 
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=User)
-async def register(user: UserCreate):
+async def register(user: UserCreate, current_user: User = Depends(require_superadmin)):
     # Check if user exists
     existing_user = await db.users.find_one({"username": user.username})
     if existing_user:
@@ -256,14 +303,7 @@ async def register(user: UserCreate):
     
     await db.users.insert_one(user_dict)
     
-    return User(
-        id=user_dict["id"],
-        username=user_dict["username"],
-        email=user_dict["email"],
-        full_name=user_dict["full_name"],
-        role=user_dict["role"],
-        created_at=user_dict["created_at"]
-    )
+    return User(**user_dict)
 
 @api_router.post("/auth/login", response_model=Token)
 async def login(user_login: UserLogin):
@@ -273,6 +313,9 @@ async def login(user_login: UserLogin):
     
     if not verify_password(user_login.password, user["password"]):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
+    
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=401, detail="User account is disabled")
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -290,11 +333,70 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+# ==================== USER MANAGEMENT (Superadmin only) ====================
+
+@api_router.get("/users", response_model=List[User])
+async def get_users(current_user: User = Depends(require_superadmin)):
+    users = await db.users.find({}, {"_id": 0, "password": 0}).to_list(None)
+    return [User(**user) for user in users]
+
+@api_router.get("/users/{user_id}", response_model=User)
+async def get_user(user_id: str, current_user: User = Depends(require_superadmin)):
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return User(**user)
+
+@api_router.put("/users/{user_id}", response_model=User)
+async def update_user(user_id: str, user_update: UserUpdate, current_user: User = Depends(require_superadmin)):
+    existing_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not existing_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_dict = {k: v for k, v in user_update.model_dump().items() if v is not None}
+    
+    if "password" in update_dict:
+        update_dict["password"] = get_password_hash(update_dict["password"])
+    
+    await db.users.update_one({"id": user_id}, {"$set": update_dict})
+    
+    updated_user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    return User(**updated_user)
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, current_user: User = Depends(require_superadmin)):
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted successfully"}
+
+
+# ==================== COMPANY SETTINGS ====================
+
+@api_router.get("/settings/company", response_model=CompanySettings)
+async def get_company_settings(current_user: User = Depends(get_current_user)):
+    settings = await db.company_settings.find_one({}, {"_id": 0})
+    if not settings:
+        return CompanySettings()
+    return CompanySettings(**settings)
+
+@api_router.put("/settings/company", response_model=CompanySettings)
+async def update_company_settings(settings: CompanySettings, current_user: User = Depends(require_superadmin)):
+    await db.company_settings.update_one(
+        {},
+        {"$set": settings.model_dump()},
+        upsert=True
+    )
+    return settings
+
+
 # ==================== DASHBOARD ROUTES ====================
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
-    # Count documents
     total_leads = await db.leads.count_documents({})
     total_quotes = await db.quotes.count_documents({})
     total_orders = await db.orders.count_documents({})
@@ -302,8 +404,9 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
     active_orders = await db.orders.count_documents({"status": {"$in": ["assigned", "in_transit"]}})
     delivered_orders = await db.orders.count_documents({"status": "delivered"})
     unpaid_invoices = await db.invoices.count_documents({"status": "unpaid"})
+    total_users = await db.users.count_documents({})
+    total_carriers = await db.carriers.count_documents({})
     
-    # Calculate total revenue from paid invoices
     paid_invoices = await db.invoices.find({"status": "paid"}, {"_id": 0, "amount": 1}).to_list(None)
     total_revenue = sum([inv["amount"] for inv in paid_invoices])
     
@@ -315,7 +418,9 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
         pending_quotes=pending_quotes,
         active_orders=active_orders,
         delivered_orders=delivered_orders,
-        unpaid_invoices=unpaid_invoices
+        unpaid_invoices=unpaid_invoices,
+        total_users=total_users,
+        total_carriers=total_carriers
     )
 
 
@@ -329,11 +434,6 @@ async def create_lead(lead: LeadCreate, current_user: User = Depends(get_current
     lead_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     await db.leads.insert_one(lead_dict)
-    
-    # Send SMS notification
-    message = f"New lead received: {lead.customer_name} - {lead.vehicle_year} {lead.vehicle_make} {lead.vehicle_model}"
-    await send_sms(lead.phone, f"Thank you for contacting us! We'll reach out shortly. - Auto Transport CRM")
-    
     return Lead(**lead_dict)
 
 @api_router.get("/leads", response_model=List[Lead])
@@ -374,7 +474,6 @@ async def delete_lead(lead_id: str, current_user: User = Depends(get_current_use
 
 @api_router.post("/quotes", response_model=Quote)
 async def create_quote(quote: QuoteCreate, current_user: User = Depends(get_current_user)):
-    # Verify lead exists
     lead = await db.leads.find_one({"id": quote.lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -385,14 +484,13 @@ async def create_quote(quote: QuoteCreate, current_user: User = Depends(get_curr
     quote_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     quote_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
+    # Serialize datetime fields
+    for field in ["pickup_date_from", "pickup_date_to", "delivery_date_from", "delivery_date_to"]:
+        if quote_dict.get(field):
+            quote_dict[field] = quote_dict[field].isoformat()
+    
     await db.quotes.insert_one(quote_dict)
-    
-    # Update lead status to quoted
     await db.leads.update_one({"id": quote.lead_id}, {"$set": {"status": "quoted", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    
-    # Send SMS notification
-    message = f"Quote {quote_dict['quote_number']}: ${quote.price} for transport from {quote.pickup_city} to {quote.delivery_city}"
-    await send_sms(lead["phone"], message)
     
     return Quote(**quote_dict)
 
@@ -417,17 +515,28 @@ async def update_quote(quote_id: str, quote_update: QuoteCreate, current_user: U
     update_dict = quote_update.model_dump()
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
+    # Serialize datetime fields
+    for field in ["pickup_date_from", "pickup_date_to", "delivery_date_from", "delivery_date_to"]:
+        if update_dict.get(field):
+            update_dict[field] = update_dict[field].isoformat()
+    
     await db.quotes.update_one({"id": quote_id}, {"$set": update_dict})
     
     updated_quote = await db.quotes.find_one({"id": quote_id}, {"_id": 0})
     return Quote(**updated_quote)
+
+@api_router.delete("/quotes/{quote_id}")
+async def delete_quote(quote_id: str, current_user: User = Depends(get_current_user)):
+    result = await db.quotes.delete_one({"id": quote_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    return {"message": "Quote deleted successfully"}
 
 
 # ==================== ORDER ROUTES ====================
 
 @api_router.post("/orders", response_model=Order)
 async def create_order(order: OrderCreate, current_user: User = Depends(get_current_user)):
-    # Verify quote exists
     quote = await db.quotes.find_one({"id": order.quote_id}, {"_id": 0})
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
@@ -439,17 +548,12 @@ async def create_order(order: OrderCreate, current_user: User = Depends(get_curr
     order_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     # Serialize datetime fields
-    if order_dict.get("pickup_date"):
-        order_dict["pickup_date"] = order_dict["pickup_date"].isoformat()
-    if order_dict.get("delivery_date"):
-        order_dict["delivery_date"] = order_dict["delivery_date"].isoformat()
+    for field in ["pickup_date", "delivery_date", "actual_pickup_date", "actual_delivery_date"]:
+        if order_dict.get(field):
+            order_dict[field] = order_dict[field].isoformat()
     
     await db.orders.insert_one(order_dict)
-    
-    # Update quote status to converted
     await db.quotes.update_one({"id": order.quote_id}, {"$set": {"status": "converted", "updated_at": datetime.now(timezone.utc).isoformat()}})
-    
-    # Update lead status to converted
     await db.leads.update_one({"id": quote["lead_id"]}, {"$set": {"status": "converted", "updated_at": datetime.now(timezone.utc).isoformat()}})
     
     return Order(**order_dict)
@@ -476,29 +580,21 @@ async def update_order(order_id: str, order_update: OrderCreate, current_user: U
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
     # Serialize datetime fields
-    if update_dict.get("pickup_date"):
-        update_dict["pickup_date"] = update_dict["pickup_date"].isoformat()
-    if update_dict.get("delivery_date"):
-        update_dict["delivery_date"] = update_dict["delivery_date"].isoformat()
+    for field in ["pickup_date", "delivery_date", "actual_pickup_date", "actual_delivery_date"]:
+        if update_dict.get(field):
+            update_dict[field] = update_dict[field].isoformat()
     
     await db.orders.update_one({"id": order_id}, {"$set": update_dict})
     
-    # Send SMS notification if status changed
-    if update_dict.get("status") != existing_order.get("status"):
-        quote = await db.quotes.find_one({"id": existing_order["quote_id"]}, {"_id": 0})
-        if quote:
-            lead = await db.leads.find_one({"id": quote["lead_id"]}, {"_id": 0})
-            if lead:
-                status_messages = {
-                    "assigned": "Your shipment has been assigned to a carrier.",
-                    "in_transit": "Your vehicle is now in transit!",
-                    "delivered": "Your vehicle has been delivered. Thank you!"
-                }
-                if update_dict["status"] in status_messages:
-                    await send_sms(lead["phone"], f"Order {existing_order['order_number']}: {status_messages[update_dict['status']]}")
-    
     updated_order = await db.orders.find_one({"id": order_id}, {"_id": 0})
     return Order(**updated_order)
+
+@api_router.delete("/orders/{order_id}")
+async def delete_order(order_id: str, current_user: User = Depends(get_current_user)):
+    result = await db.orders.delete_one({"id": order_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"message": "Order deleted successfully"}
 
 
 # ==================== CARRIER ROUTES ====================
@@ -510,12 +606,10 @@ async def create_carrier(carrier: CarrierCreate, current_user: User = Depends(ge
     carrier_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     carrier_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    # Serialize datetime fields
     if carrier_dict.get("insurance_expiry"):
         carrier_dict["insurance_expiry"] = carrier_dict["insurance_expiry"].isoformat()
     
     await db.carriers.insert_one(carrier_dict)
-    
     return Carrier(**carrier_dict)
 
 @api_router.get("/carriers", response_model=List[Carrier])
@@ -539,7 +633,6 @@ async def update_carrier(carrier_id: str, carrier_update: CarrierCreate, current
     update_dict = carrier_update.model_dump()
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    # Serialize datetime fields
     if update_dict.get("insurance_expiry"):
         update_dict["insurance_expiry"] = update_dict["insurance_expiry"].isoformat()
     
@@ -548,12 +641,18 @@ async def update_carrier(carrier_id: str, carrier_update: CarrierCreate, current
     updated_carrier = await db.carriers.find_one({"id": carrier_id}, {"_id": 0})
     return Carrier(**updated_carrier)
 
+@api_router.delete("/carriers/{carrier_id}")
+async def delete_carrier(carrier_id: str, current_user: User = Depends(get_current_user)):
+    result = await db.carriers.delete_one({"id": carrier_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Carrier not found")
+    return {"message": "Carrier deleted successfully"}
+
 
 # ==================== INVOICE ROUTES ====================
 
 @api_router.post("/invoices", response_model=Invoice)
 async def create_invoice(invoice: InvoiceCreate, current_user: User = Depends(get_current_user)):
-    # Verify order exists
     order = await db.orders.find_one({"id": invoice.order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -564,6 +663,9 @@ async def create_invoice(invoice: InvoiceCreate, current_user: User = Depends(ge
     invoice_dict["created_at"] = datetime.now(timezone.utc).isoformat()
     invoice_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
+    # Calculate total
+    invoice_dict["total_amount"] = invoice_dict["amount"] + invoice_dict["tax_amount"] - invoice_dict["discount_amount"]
+    
     # Serialize datetime fields
     if invoice_dict.get("due_date"):
         invoice_dict["due_date"] = invoice_dict["due_date"].isoformat()
@@ -571,7 +673,6 @@ async def create_invoice(invoice: InvoiceCreate, current_user: User = Depends(ge
         invoice_dict["paid_date"] = invoice_dict["paid_date"].isoformat()
     
     await db.invoices.insert_one(invoice_dict)
-    
     return Invoice(**invoice_dict)
 
 @api_router.get("/invoices", response_model=List[Invoice])
@@ -595,20 +696,32 @@ async def update_invoice(invoice_id: str, invoice_update: InvoiceCreate, current
     update_dict = invoice_update.model_dump()
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     
+    # Calculate total
+    update_dict["total_amount"] = update_dict["amount"] + update_dict["tax_amount"] - update_dict["discount_amount"]
+    
     # If status changed to paid, set paid_date
     if update_dict["status"] == "paid" and existing_invoice["status"] != "paid":
         update_dict["paid_date"] = datetime.now(timezone.utc).isoformat()
     
     # Serialize datetime fields
     if update_dict.get("due_date"):
-        update_dict["due_date"] = update_dict["due_date"].isoformat()
+        if hasattr(update_dict["due_date"], 'isoformat'):
+            update_dict["due_date"] = update_dict["due_date"].isoformat()
     if update_dict.get("paid_date"):
-        update_dict["paid_date"] = update_dict["paid_date"].isoformat()
+        if hasattr(update_dict["paid_date"], 'isoformat'):
+            update_dict["paid_date"] = update_dict["paid_date"].isoformat()
     
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_dict})
     
     updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     return Invoice(**updated_invoice)
+
+@api_router.delete("/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, current_user: User = Depends(get_current_user)):
+    result = await db.invoices.delete_one({"id": invoice_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"message": "Invoice deleted successfully"}
 
 
 # Include the router in the main app
