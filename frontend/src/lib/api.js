@@ -32,14 +32,17 @@ api.interceptors.response.use(
 export const getDashboardStats = () => api.get('/dashboard/stats');
 
 // Leads
-export const getLeads = () => api.get('/leads');
+export const getLeads = (params = {}) => api.get('/leads', { params });
+export const getLeadsCount = (params = {}) => api.get('/leads/count/total', { params });
 export const getLead = (id) => api.get(`/leads/${id}`);
 export const createLead = (data) => api.post('/leads', data);
 export const updateLead = (id, data) => api.put(`/leads/${id}`, data);
 export const deleteLead = (id) => api.delete(`/leads/${id}`);
 
 // Quotes
-export const getQuotes = () => api.get('/quotes');
+export const getQuotes = (params = {}) => api.get('/quotes', { params });
+export const getQuotesCount = (params = {}) => api.get('/quotes/count/total', { params });
+export const getQuotesAgents = () => api.get('/quotes/agents/list');
 export const getQuote = (id) => api.get(`/quotes/${id}`);
 export const createQuote = (data) => api.post('/quotes', data);
 export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);

@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
-import { getQuotes, createQuote, updateQuote, getLeads } from '../lib/api';
+import { getQuotes, getQuotesCount, getQuotesAgents, createQuote, updateQuote, getLeads } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -19,308 +19,83 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, FileText, MapPin, DollarSign, Calculator, Eye } from 'lucide-react';
+import { Plus, Search, Edit, FileText, Eye, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
-const vehicleTypes = ['Sedan', 'SUV', 'Truck', 'Van', 'Motorcycle', 'Coupe', 'Convertible', 'Other'];
 const statusOptions = ['pending', 'approved', 'rejected', 'converted'];
-
-const basePricePerMile = {
-  Sedan: 0.55,
-  SUV: 0.65,
-  Truck: 0.75,
-  Van: 0.70,
-  Motorcycle: 0.45,
-  Coupe: 0.55,
-  Convertible: 0.60,
-  Other: 0.60
-};
-
-const QuoteForm = ({ quote, leads, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState(quote || {
-    lead_id: '',
-    pickup_location: '',
-    pickup_city: '',
-    pickup_state: '',
-    delivery_location: '',
-    delivery_city: '',
-    delivery_state: '',
-    distance: 0,
-    vehicle_type: 'Sedan',
-    price: 0,
-    status: 'pending',
-    notes: ''
-  });
-
-  const calculatePrice = (distance, vehicleType) => {
-    const basePrice = basePricePerMile[vehicleType] || 0.60;
-    return Math.round(distance * basePrice + 150); // Base fee of $150
-  };
-
-  useEffect(() => {
-    if (formData.distance > 0 && formData.vehicle_type) {
-      const calculatedPrice = calculatePrice(formData.distance, formData.vehicle_type);
-      setFormData(prev => ({ ...prev, price: calculatedPrice }));
-    }
-  }, [formData.distance, formData.vehicle_type]);
-
-  const handleLeadSelect = (leadId) => {
-    const selectedLead = leads.find(l => l.id === leadId);
-    if (selectedLead) {
-      setFormData(prev => ({
-        ...prev,
-        lead_id: leadId,
-        vehicle_type: selectedLead.vehicle_type || 'Sedan'
-      }));
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label className="form-label">Select Lead *</Label>
-        <Select
-          value={formData.lead_id}
-          onValueChange={handleLeadSelect}
-        >
-          <SelectTrigger data-testid="quote-lead">
-            <SelectValue placeholder="Select a lead" />
-          </SelectTrigger>
-          <SelectContent>
-            {leads.filter(l => l.status !== 'converted' && l.status !== 'lost').map((lead) => (
-              <SelectItem key={lead.id} value={lead.id}>
-                {lead.customer_name} - {lead.vehicle_year} {lead.vehicle_make} {lead.vehicle_model}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="border-t border-slate-200 pt-4">
-        <h4 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
-          <MapPin className="w-4 h-4" /> Pickup Location
-        </h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-3">
-            <Label className="form-label">Address *</Label>
-            <Input
-              value={formData.pickup_location}
-              onChange={(e) => setFormData({ ...formData, pickup_location: e.target.value })}
-              className="form-input"
-              placeholder="Street address"
-              required
-              data-testid="quote-pickup-address"
-            />
-          </div>
-          <div>
-            <Label className="form-label">City *</Label>
-            <Input
-              value={formData.pickup_city}
-              onChange={(e) => setFormData({ ...formData, pickup_city: e.target.value })}
-              className="form-input"
-              required
-              data-testid="quote-pickup-city"
-            />
-          </div>
-          <div>
-            <Label className="form-label">State *</Label>
-            <Input
-              value={formData.pickup_state}
-              onChange={(e) => setFormData({ ...formData, pickup_state: e.target.value })}
-              className="form-input"
-              placeholder="e.g., CA"
-              required
-              data-testid="quote-pickup-state"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-slate-200 pt-4">
-        <h4 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
-          <MapPin className="w-4 h-4" /> Delivery Location
-        </h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-3">
-            <Label className="form-label">Address *</Label>
-            <Input
-              value={formData.delivery_location}
-              onChange={(e) => setFormData({ ...formData, delivery_location: e.target.value })}
-              className="form-input"
-              placeholder="Street address"
-              required
-              data-testid="quote-delivery-address"
-            />
-          </div>
-          <div>
-            <Label className="form-label">City *</Label>
-            <Input
-              value={formData.delivery_city}
-              onChange={(e) => setFormData({ ...formData, delivery_city: e.target.value })}
-              className="form-input"
-              required
-              data-testid="quote-delivery-city"
-            />
-          </div>
-          <div>
-            <Label className="form-label">State *</Label>
-            <Input
-              value={formData.delivery_state}
-              onChange={(e) => setFormData({ ...formData, delivery_state: e.target.value })}
-              className="form-input"
-              placeholder="e.g., TX"
-              required
-              data-testid="quote-delivery-state"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-slate-200 pt-4">
-        <h4 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
-          <Calculator className="w-4 h-4" /> Pricing
-        </h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <Label className="form-label">Distance (miles) *</Label>
-            <Input
-              type="number"
-              value={formData.distance}
-              onChange={(e) => setFormData({ ...formData, distance: parseFloat(e.target.value) || 0 })}
-              className="form-input"
-              required
-              data-testid="quote-distance"
-            />
-          </div>
-          <div>
-            <Label className="form-label">Vehicle Type</Label>
-            <Select
-              value={formData.vehicle_type}
-              onValueChange={(value) => setFormData({ ...formData, vehicle_type: value })}
-            >
-              <SelectTrigger data-testid="quote-vehicle-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {vehicleTypes.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="form-label">Price ($) *</Label>
-            <Input
-              type="number"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-              className="form-input font-mono"
-              required
-              data-testid="quote-price"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 mt-2">
-          * Price auto-calculated based on distance and vehicle type. You can adjust manually.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="form-label">Status</Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => setFormData({ ...formData, status: value })}
-          >
-            <SelectTrigger data-testid="quote-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div>
-        <Label className="form-label">Notes</Label>
-        <textarea
-          value={formData.notes || ''}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          className="form-input min-h-[80px] resize-none"
-          data-testid="quote-notes"
-        />
-      </div>
-
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700" data-testid="quote-submit">
-          {quote ? 'Update Quote' : 'Create Quote'}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-};
 
 const Quotes = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'superadmin';
+  
   const [quotes, setQuotes] = useState([]);
-  const [leads, setLeads] = useState([]);
+  const [totalQuotes, setTotalQuotes] = useState(0);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingQuote, setEditingQuote] = useState(null);
+  const [assignedFilter, setAssignedFilter] = useState('all');
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(50);
+  
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [assigningQuote, setAssigningQuote] = useState(null);
+  const [selectedUser, setSelectedUser] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [quotesRes, leadsRes] = await Promise.all([getQuotes(), getLeads()]);
+      const params = {
+        skip: page * pageSize,
+        limit: pageSize
+      };
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (assignedFilter !== 'all') params.assigned_to = assignedFilter;
+      if (search) params.search = search;
+
+      const [quotesRes, countRes, agentsRes] = await Promise.all([
+        getQuotes(params),
+        getQuotesCount(params),
+        getQuotesAgents()
+      ]);
+      
       setQuotes(quotesRes.data);
-      setLeads(leadsRes.data);
+      setTotalQuotes(countRes.data.total);
+      setAgents(agentsRes.data);
     } catch (error) {
-      toast.error('Failed to fetch data');
+      toast.error('Failed to fetch quotes');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, statusFilter, assignedFilter, search]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const handleCreate = async (data) => {
-    try {
-      await createQuote(data);
-      toast.success('Quote created successfully');
-      setIsDialogOpen(false);
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create quote');
-    }
+  const handleSearch = () => {
+    setSearch(searchInput);
+    setPage(0);
   };
 
-  const handleUpdate = async (data) => {
+  const handleAssignQuote = async () => {
+    if (!assigningQuote || !selectedUser) return;
     try {
-      await updateQuote(editingQuote.id, data);
-      toast.success('Quote updated successfully');
-      setIsDialogOpen(false);
-      setEditingQuote(null);
+      await updateQuote(assigningQuote.id, {
+        ...assigningQuote,
+        assigned_to: selectedUser
+      });
+      toast.success('Quote assigned successfully');
+      setIsAssignDialogOpen(false);
+      setAssigningQuote(null);
+      setSelectedUser('');
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update quote');
+      toast.error('Failed to assign quote');
     }
   };
 
@@ -334,25 +109,16 @@ const Quotes = () => {
     return statusMap[status] || 'status-pending';
   };
 
-  const filteredQuotes = quotes.filter((quote) => {
-    const matchesSearch = 
-      quote.quote_number?.toLowerCase().includes(search.toLowerCase()) ||
-      quote.pickup_city?.toLowerCase().includes(search.toLowerCase()) ||
-      quote.delivery_city?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || quote.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const totalPages = Math.ceil(totalQuotes / pageSize);
 
   return (
     <Layout>
       <Header title="Quotes">
         <Button
-          onClick={() => { setEditingQuote(null); setIsDialogOpen(true); }}
-          className="bg-blue-600 hover:bg-blue-700"
-          data-testid="create-quote-btn"
+          onClick={() => navigate('/leads')}
+          variant="outline"
         >
-          <Plus className="w-4 h-4 mr-2" />
-          New Quote
+          Create from Lead
         </Button>
       </Header>
 
@@ -361,20 +127,23 @@ const Quotes = () => {
         <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <div className="relative flex gap-2">
                 <Input
-                  placeholder="Search quotes..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 form-input"
+                  placeholder="Search quotes, cities, agents..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="form-input"
                   data-testid="search-quotes"
                 />
+                <Button onClick={handleSearch} variant="outline">
+                  <Search className="w-4 h-4" />
+                </Button>
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="filter-quote-status">
-                <SelectValue placeholder="Filter by status" />
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -385,6 +154,47 @@ const Quotes = () => {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={assignedFilter} onValueChange={(v) => { setAssignedFilter(v); setPage(0); }}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {agents.map((agent) => (
+                  <SelectItem key={agent} value={agent}>
+                    {agent}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-slate-600">
+            Showing {quotes.length} of {totalQuotes.toLocaleString()} quotes
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm text-slate-600">
+              Page {page + 1} of {totalPages || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => p + 1)}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
         </div>
 
@@ -394,7 +204,7 @@ const Quotes = () => {
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
             </div>
-          ) : filteredQuotes.length === 0 ? (
+          ) : quotes.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">No quotes found</p>
@@ -405,32 +215,25 @@ const Quotes = () => {
                 <tr>
                   <th>Quote #</th>
                   <th>Route</th>
-                  <th>Distance</th>
-                  <th>Vehicle</th>
                   <th>Price</th>
+                  <th>Assigned To</th>
                   <th>Status</th>
-                  <th>Created</th>
+                  <th>Date</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredQuotes.map((quote) => (
-                  <tr key={quote.id} data-testid={`quote-row-${quote.id}`}>
+                {quotes.map((quote) => (
+                  <tr key={quote.id} className="hover:bg-slate-50">
                     <td>
                       <span className="font-mono font-medium text-slate-900">{quote.quote_number}</span>
                     </td>
                     <td>
-                      <div className="flex items-center gap-2">
+                      <div className="text-sm">
                         <span className="text-slate-700">{quote.pickup_city}, {quote.pickup_state}</span>
-                        <span className="text-slate-400">→</span>
+                        <span className="text-slate-400 mx-1">→</span>
                         <span className="text-slate-700">{quote.delivery_city}, {quote.delivery_state}</span>
                       </div>
-                    </td>
-                    <td>
-                      <span className="font-mono text-sm">{quote.distance?.toLocaleString()} mi</span>
-                    </td>
-                    <td>
-                      <span className="text-sm text-slate-600">{quote.vehicle_type}</span>
                     </td>
                     <td>
                       <span className="font-mono font-medium text-emerald-600">
@@ -438,31 +241,46 @@ const Quotes = () => {
                       </span>
                     </td>
                     <td>
+                      <span className="text-sm text-slate-600">{quote.assigned_to || '-'}</span>
+                    </td>
+                    <td>
                       <span className={`status-badge ${getStatusClass(quote.status)}`}>
                         {quote.status}
                       </span>
                     </td>
                     <td>
-                      <span className="font-mono text-sm text-slate-600">
+                      <span className="font-mono text-sm text-slate-500">
                         {new Date(quote.created_at).toLocaleDateString()}
                       </span>
                     </td>
                     <td>
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => navigate(`/quotes/${quote.id}`)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          data-testid={`view-quote-${quote.id}`}
+                          className="text-blue-600 hover:bg-blue-50"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
+                        {isSuperAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { 
+                              setAssigningQuote(quote); 
+                              setSelectedUser(quote.assigned_to || ''); 
+                              setIsAssignDialogOpen(true); 
+                            }}
+                            className="text-violet-600 hover:bg-violet-50"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => { setEditingQuote(quote); setIsDialogOpen(true); }}
-                          data-testid={`edit-quote-${quote.id}`}
+                          onClick={() => navigate(`/quotes/${quote.id}`)}
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -475,20 +293,46 @@ const Quotes = () => {
           )}
         </div>
 
-        {/* Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingQuote ? 'Edit Quote' : 'Create New Quote'}</DialogTitle>
-            </DialogHeader>
-            <QuoteForm
-              quote={editingQuote}
-              leads={leads}
-              onSubmit={editingQuote ? handleUpdate : handleCreate}
-              onCancel={() => { setIsDialogOpen(false); setEditingQuote(null); }}
-            />
-          </DialogContent>
-        </Dialog>
+        {/* Assign Dialog */}
+        {isSuperAdmin && (
+          <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Assign Quote to Agent</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-600">Quote: <span className="font-mono font-medium">{assigningQuote?.quote_number}</span></p>
+                  <p className="text-sm text-slate-600">Route: {assigningQuote?.pickup_city} → {assigningQuote?.delivery_city}</p>
+                  <p className="text-sm text-slate-600">Current: <span className="font-medium">{assigningQuote?.assigned_to || 'Unassigned'}</span></p>
+                </div>
+                <div>
+                  <Label className="form-label">Assign to</Label>
+                  <Input
+                    value={selectedUser}
+                    onChange={(e) => setSelectedUser(e.target.value)}
+                    className="form-input"
+                    placeholder="Enter agent name"
+                    list="agents-list"
+                  />
+                  <datalist id="agents-list">
+                    {agents.map((agent) => (
+                      <option key={agent} value={agent} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAssignQuote}>
+                  Assign
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </Layout>
   );

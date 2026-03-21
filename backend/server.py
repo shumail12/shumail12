@@ -437,9 +437,45 @@ async def create_lead(lead: LeadCreate, current_user: User = Depends(get_current
     return Lead(**lead_dict)
 
 @api_router.get("/leads", response_model=List[Lead])
-async def get_leads(current_user: User = Depends(get_current_user)):
-    leads = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
+async def get_leads(
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    query = {}
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+            {"vehicle_make": {"$regex": search, "$options": "i"}},
+            {"vehicle_model": {"$regex": search, "$options": "i"}}
+        ]
+    
+    leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [Lead(**lead) for lead in leads]
+
+@api_router.get("/leads/count/total")
+async def get_leads_count(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    query = {}
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}}
+        ]
+    count = await db.leads.count_documents(query)
+    return {"total": count}
 
 @api_router.get("/leads/{lead_id}", response_model=Lead)
 async def get_lead(lead_id: str, current_user: User = Depends(get_current_user)):
@@ -495,9 +531,58 @@ async def create_quote(quote: QuoteCreate, current_user: User = Depends(get_curr
     return Quote(**quote_dict)
 
 @api_router.get("/quotes", response_model=List[Quote])
-async def get_quotes(current_user: User = Depends(get_current_user)):
-    quotes = await db.quotes.find({}, {"_id": 0}).sort("created_at", -1).to_list(None)
+async def get_quotes(
+    skip: int = 0, 
+    limit: int = 100,
+    status: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    # Build query
+    query = {}
+    if status:
+        query["status"] = status
+    if assigned_to:
+        query["assigned_to"] = assigned_to
+    if search:
+        query["$or"] = [
+            {"quote_number": {"$regex": search, "$options": "i"}},
+            {"pickup_city": {"$regex": search, "$options": "i"}},
+            {"delivery_city": {"$regex": search, "$options": "i"}},
+            {"assigned_to": {"$regex": search, "$options": "i"}}
+        ]
+    
+    quotes = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return [Quote(**quote) for quote in quotes]
+
+@api_router.get("/quotes/count/total")
+async def get_quotes_count(
+    status: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    query = {}
+    if status:
+        query["status"] = status
+    if assigned_to:
+        query["assigned_to"] = assigned_to
+    if search:
+        query["$or"] = [
+            {"quote_number": {"$regex": search, "$options": "i"}},
+            {"pickup_city": {"$regex": search, "$options": "i"}},
+            {"delivery_city": {"$regex": search, "$options": "i"}},
+            {"assigned_to": {"$regex": search, "$options": "i"}}
+        ]
+    count = await db.quotes.count_documents(query)
+    return {"total": count}
+
+@api_router.get("/quotes/agents/list")
+async def get_quotes_agents(current_user: User = Depends(get_current_user)):
+    """Get unique list of assigned agents"""
+    agents = await db.quotes.distinct("assigned_to")
+    return [a for a in agents if a]
 
 @api_router.get("/quotes/{quote_id}", response_model=Quote)
 async def get_quote(quote_id: str, current_user: User = Depends(get_current_user)):
