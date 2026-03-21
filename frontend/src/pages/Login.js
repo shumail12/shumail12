@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Truck, AlertCircle, Loader2 } from 'lucide-react';
+import { Truck, AlertCircle, Loader2, Shield, Clock, DollarSign, MapPin } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -54,13 +54,6 @@ const Login = () => {
           
           {/* Grid pattern */}
           <div className="absolute inset-0 bg-grid-pattern opacity-10" />
-          
-          {/* Road lines animation */}
-          <div className="absolute bottom-0 left-0 right-0 h-32">
-            <div className="road-line line-1" />
-            <div className="road-line line-2" />
-            <div className="road-line line-3" />
-          </div>
         </div>
 
         {/* Content */}
@@ -71,30 +64,64 @@ const Login = () => {
                 <Truck className="w-9 h-9 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl font-heading font-bold tracking-tight">Breamway</h1>
-                <p className="text-blue-300 text-lg">.com</p>
+                <h1 className="text-3xl font-heading font-bold tracking-tight">Shumail</h1>
+                <p className="text-blue-300 text-lg font-medium">Technologies</p>
               </div>
             </div>
             
-            <h2 className="text-3xl font-heading font-bold mb-4 leading-tight">
-              Auto Transport<br />
-              <span className="text-blue-400">Management System</span>
+            <h2 className="text-4xl font-heading font-bold mb-6 leading-tight">
+              Vehicle Shipping<br />
+              <span className="text-blue-400">Made Simple</span>
             </h2>
             
-            <p className="text-lg text-slate-300 max-w-md leading-relaxed">
-              Streamline your brokerage operations with our comprehensive CRM. 
-              Manage leads, quotes, orders, and dispatch all in one place.
+            <p className="text-xl text-slate-300 max-w-md leading-relaxed mb-8">
+              Get instant quotes. Ship with confidence. Your vehicle deserves the best transport service.
             </p>
 
-            <div className="mt-10 grid grid-cols-2 gap-4">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
-                <p className="text-2xl font-bold text-white">500+</p>
-                <p className="text-sm text-slate-400">Orders Delivered</p>
+            {/* Features */}
+            <div className="space-y-4 mb-10">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-blue-600/30 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Competitive Pricing</p>
+                  <p className="text-sm text-slate-400">Best rates in the industry</p>
+                </div>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
-                <p className="text-2xl font-bold text-white">98%</p>
-                <p className="text-sm text-slate-400">On-Time Rate</p>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-emerald-600/30 rounded-lg flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Fully Insured</p>
+                  <p className="text-sm text-slate-400">Your vehicle is protected</p>
+                </div>
               </div>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-amber-600/30 rounded-lg flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">On-Time Delivery</p>
+                  <p className="text-sm text-slate-400">98% on-time delivery rate</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-violet-600/30 rounded-lg flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Nationwide Coverage</p>
+                  <p className="text-sm text-slate-400">Door-to-door service across USA</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-sm text-slate-400">
+                "Moving vehicles across the nation with precision and care."
+              </p>
             </div>
           </div>
         </div>
@@ -113,8 +140,8 @@ const Login = () => {
               <Truck className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-heading font-bold text-slate-900">Breamway.com</h2>
-              <p className="text-sm text-slate-500">Transport Management</p>
+              <h2 className="text-2xl font-heading font-bold text-slate-900">Shumail Technologies</h2>
+              <p className="text-sm text-slate-500">Vehicle Transport CRM</p>
             </div>
           </div>
 
@@ -123,7 +150,7 @@ const Login = () => {
               <h3 className="text-2xl font-heading font-bold text-slate-900 mb-2">
                 Welcome Back
               </h3>
-              <p className="text-slate-500">Sign in to continue to your dashboard</p>
+              <p className="text-slate-500">Sign in to manage your quotes & shipments</p>
             </div>
 
             {error && (
@@ -185,13 +212,13 @@ const Login = () => {
 
             <div className="mt-8 pt-6 border-t border-slate-100">
               <p className="text-center text-sm text-slate-500">
-                Powered by <span className="font-semibold text-blue-600">Breamway.com</span>
+                Powered by <span className="font-semibold text-blue-600">Shumail Technologies</span>
               </p>
             </div>
           </div>
 
           <p className="text-center text-sm text-slate-400 mt-6">
-            © 2024 Breamway.com • All rights reserved
+            © 2024 Shumail Technologies • All rights reserved
           </p>
         </div>
       </div>
@@ -229,11 +256,6 @@ const Login = () => {
           10% { opacity: 1; }
           90% { opacity: 1; }
           100% { transform: translateX(calc(100vw + 100px)); opacity: 0; }
-        }
-        
-        @keyframes road-dash {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50px); }
         }
         
         @keyframes pulse-slow {
@@ -288,32 +310,6 @@ const Login = () => {
         .truck-3 {
           top: 75%;
           animation-delay: 10s;
-        }
-        
-        .road-line {
-          position: absolute;
-          height: 4px;
-          width: 50px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 2px;
-          animation: road-dash 1s linear infinite;
-        }
-        
-        .line-1 {
-          bottom: 50px;
-          left: 20%;
-        }
-        
-        .line-2 {
-          bottom: 50px;
-          left: 50%;
-          animation-delay: 0.3s;
-        }
-        
-        .line-3 {
-          bottom: 50px;
-          left: 80%;
-          animation-delay: 0.6s;
         }
         
         .bg-grid-pattern {

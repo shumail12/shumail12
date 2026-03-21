@@ -53,8 +53,8 @@ export const Sidebar = () => {
           <Truck className="w-5 h-5 text-white" />
         </div>
         <div>
-          <span className="text-lg font-heading font-bold text-white">Breamway</span>
-          <span className="text-blue-400 text-sm">.com</span>
+          <span className="text-lg font-heading font-bold text-white">Shumail</span>
+          <span className="text-blue-400 text-sm ml-1">Tech</span>
         </div>
       </div>
 
