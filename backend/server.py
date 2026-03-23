@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 from jose import JWTError, jwt
+import time
+from collections import defaultdict
 
 
 ROOT_DIR = Path(__file__).parent
@@ -71,6 +73,14 @@ class User(UserBase):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    username: str
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    security_answer: str
+    new_password: str
 
 class Token(BaseModel):
     access_token: str
@@ -330,6 +340,61 @@ async def login(user_login: UserLogin):
 @api_router.get("/auth/me", response_model=User)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+# Rate limiter for password reset
+_reset_attempts = defaultdict(list)
+RESET_RATE_LIMIT = 5  # max attempts
+RESET_RATE_WINDOW = 900  # 15 minutes
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    """Step 1: Verify username is a superadmin, return security question"""
+    user = await db.users.find_one({"username": req.username}, {"_id": 0})
+    if not user or user.get("role") != "superadmin":
+        raise HTTPException(status_code=404, detail="Account not found or not eligible for password reset")
+    
+    question = user.get("security_question")
+    if not question:
+        raise HTTPException(status_code=400, detail="Security question not configured for this account")
+    
+    return {"security_question": question, "username": req.username}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    """Step 2: Verify security answer and set new password"""
+    # Rate limiting
+    now = time.time()
+    key = req.username
+    _reset_attempts[key] = [t for t in _reset_attempts[key] if now - t < RESET_RATE_WINDOW]
+    if len(_reset_attempts[key]) >= RESET_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many reset attempts. Please try again in 15 minutes.")
+    _reset_attempts[key].append(now)
+
+    user = await db.users.find_one({"username": req.username}, {"_id": 0})
+    if not user or user.get("role") != "superadmin":
+        raise HTTPException(status_code=404, detail="Account not found or not eligible")
+    
+    stored_answer = user.get("security_answer")
+    if not stored_answer:
+        raise HTTPException(status_code=400, detail="Security question not configured")
+    
+    # Verify answer (case-insensitive)
+    if not bcrypt.checkpw(req.security_answer.lower().encode('utf-8'), stored_answer.encode('utf-8')):
+        raise HTTPException(status_code=401, detail="Incorrect security answer")
+    
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    new_hash = get_password_hash(req.new_password)
+    await db.users.update_one({"username": req.username}, {"$set": {"password": new_hash}})
+    
+    # Clear rate limit on success
+    _reset_attempts.pop(key, None)
+    
+    return {"message": "Password reset successfully. You can now log in with your new password."}
 
 
 # ==================== USER MANAGEMENT (Superadmin only) ====================

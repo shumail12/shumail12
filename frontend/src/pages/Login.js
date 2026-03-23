@@ -208,17 +208,28 @@ const Login = () => {
                   'Sign in'
                 )}
               </Button>
+
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                  data-testid="forgot-password-link"
+                >
+                  Forgot Password?
+                </button>
+              </div>
             </form>
 
             <div className="mt-8 pt-6 border-t border-slate-100">
               <p className="text-center text-sm text-slate-500">
-                Powered by <span className="font-semibold text-blue-600">Shumail Technologies</span>
+                Powered by <span className="font-semibold text-blue-600">Shumail Technologies LLC</span>
               </p>
             </div>
           </div>
 
           <p className="text-center text-sm text-slate-400 mt-6">
-            © 2024 Shumail Technologies • All rights reserved
+            © 2024 Shumail Technologies LLC • All rights reserved
           </p>
         </div>
       </div>
