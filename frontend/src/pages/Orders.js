@@ -1,410 +1,169 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
-import { getOrders, createOrder, updateOrder, getQuotes, getCarriers } from '../lib/api';
+import { getOrders, updateOrder } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, Package, MapPin, Calendar, Truck, Eye } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Truck, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
-const statusOptions = ['pending', 'assigned', 'in_transit', 'delivered', 'cancelled'];
-
-const OrderForm = ({ order, quotes, carriers, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState(order || {
-    quote_id: '',
-    status: 'pending',
-    pickup_date: '',
-    delivery_date: '',
-    carrier_id: '',
-    notes: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const submitData = {
-      ...formData,
-      pickup_date: formData.pickup_date ? new Date(formData.pickup_date).toISOString() : null,
-      delivery_date: formData.delivery_date ? new Date(formData.delivery_date).toISOString() : null,
-      carrier_id: formData.carrier_id || null
-    };
-    onSubmit(submitData);
-  };
-
-  const selectedQuote = quotes.find(q => q.id === formData.quote_id);
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {!order && (
-        <div>
-          <Label className="form-label">Select Quote *</Label>
-          <Select
-            value={formData.quote_id}
-            onValueChange={(value) => setFormData({ ...formData, quote_id: value })}
-          >
-            <SelectTrigger data-testid="order-quote">
-              <SelectValue placeholder="Select an approved quote" />
-            </SelectTrigger>
-            <SelectContent>
-              {quotes.filter(q => q.status === 'approved').map((quote) => (
-                <SelectItem key={quote.id} value={quote.id}>
-                  {quote.quote_number} - {quote.pickup_city} → {quote.delivery_city} (${quote.price})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {selectedQuote && (
-        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-          <h4 className="font-medium text-slate-900 mb-2">Quote Details</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <p><span className="text-slate-500">Route:</span> {selectedQuote.pickup_city} → {selectedQuote.delivery_city}</p>
-            <p><span className="text-slate-500">Price:</span> <span className="font-mono text-emerald-600">${selectedQuote.price}</span></p>
-            <p><span className="text-slate-500">Distance:</span> {selectedQuote.distance} miles</p>
-            <p><span className="text-slate-500">Vehicle:</span> {selectedQuote.vehicle_type}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="form-label">Pickup Date</Label>
-          <Input
-            type="date"
-            value={formData.pickup_date ? formData.pickup_date.split('T')[0] : ''}
-            onChange={(e) => setFormData({ ...formData, pickup_date: e.target.value })}
-            className="form-input"
-            data-testid="order-pickup-date"
-          />
-        </div>
-        <div>
-          <Label className="form-label">Delivery Date</Label>
-          <Input
-            type="date"
-            value={formData.delivery_date ? formData.delivery_date.split('T')[0] : ''}
-            onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
-            className="form-input"
-            data-testid="order-delivery-date"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="form-label">Assign Carrier</Label>
-          <Select
-            value={formData.carrier_id || 'none'}
-            onValueChange={(value) => setFormData({ ...formData, carrier_id: value === 'none' ? '' : value })}
-          >
-            <SelectTrigger data-testid="order-carrier">
-              <SelectValue placeholder="Select a carrier" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No carrier assigned</SelectItem>
-              {carriers.filter(c => c.status === 'active').map((carrier) => (
-                <SelectItem key={carrier.id} value={carrier.id}>
-                  {carrier.name} ({carrier.active_shipments} active)
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label className="form-label">Status</Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => setFormData({ ...formData, status: value })}
-          >
-            <SelectTrigger data-testid="order-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div>
-        <Label className="form-label">Notes</Label>
-        <textarea
-          value={formData.notes || ''}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          className="form-input min-h-[80px] resize-none"
-          data-testid="order-notes"
-        />
-      </div>
-
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700" data-testid="order-submit">
-          {order ? 'Update Order' : 'Create Order'}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
+const statusColors = {
+  pending: 'bg-amber-100 text-amber-700',
+  assigned: 'bg-blue-100 text-blue-700',
+  picked_up: 'bg-cyan-100 text-cyan-700',
+  in_transit: 'bg-purple-100 text-purple-700',
+  delivered: 'bg-emerald-100 text-emerald-700',
+};
+const statusLabels = {
+  pending: 'Pending', assigned: 'Assigned', picked_up: 'Picked Up', in_transit: 'In Transit', delivered: 'Delivered'
 };
 
 const Orders = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
-  const [quotes, setQuotes] = useState([]);
-  const [carriers, setCarriers] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingOrder, setEditingOrder] = useState(null);
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(100);
+  const [quickView, setQuickView] = useState(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [ordersRes, quotesRes, carriersRes] = await Promise.all([
-        getOrders(),
-        getQuotes(),
-        getCarriers()
-      ]);
-      setOrders(ordersRes.data);
-      setQuotes(quotesRes.data);
-      setCarriers(carriersRes.data);
-    } catch (error) {
-      toast.error('Failed to fetch data');
-    } finally {
-      setLoading(false);
-    }
-  };
+      const params = { skip: page * pageSize, limit: pageSize };
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (search) params.search = search;
+      const res = await getOrders(params);
+      setOrders(res.data.orders);
+      setTotal(res.data.total);
+    } catch { toast.error('Failed to fetch orders'); }
+    finally { setLoading(false); }
+  }, [page, pageSize, statusFilter, search]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreate = async (data) => {
-    try {
-      await createOrder(data);
-      toast.success('Order created successfully');
-      setIsDialogOpen(false);
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create order');
-    }
-  };
-
-  const handleUpdate = async (data) => {
-    try {
-      await updateOrder(editingOrder.id, data);
-      toast.success('Order updated successfully');
-      setIsDialogOpen(false);
-      setEditingOrder(null);
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update order');
-    }
-  };
-
-  const getStatusClass = (status) => {
-    const statusMap = {
-      pending: 'status-pending',
-      assigned: 'status-assigned',
-      in_transit: 'status-in_transit',
-      delivered: 'status-delivered',
-      cancelled: 'status-cancelled'
-    };
-    return statusMap[status] || 'status-pending';
-  };
-
-  const getQuoteForOrder = (quoteId) => quotes.find(q => q.id === quoteId);
-  const getCarrierForOrder = (carrierId) => carriers.find(c => c.id === carrierId);
-
-  const filteredOrders = orders.filter((order) => {
-    const quote = getQuoteForOrder(order.quote_id);
-    const matchesSearch = 
-      order.order_number?.toLowerCase().includes(search.toLowerCase()) ||
-      quote?.pickup_city?.toLowerCase().includes(search.toLowerCase()) ||
-      quote?.delivery_city?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleSearch = () => { setSearch(searchInput); setPage(0); };
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <Layout>
-      <Header title="Orders">
-        <Button
-          onClick={() => { setEditingOrder(null); setIsDialogOpen(true); }}
-          className="bg-blue-600 hover:bg-blue-700"
-          data-testid="create-order-btn"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Order
-        </Button>
-      </Header>
-
+      <Header title="Orders" />
       <div className="p-6" data-testid="orders-page">
-        {/* Filters */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search orders..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 form-input"
-                  data-testid="search-orders"
-                />
-              </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-5">
+          <div className="flex flex-wrap gap-3">
+            <div className="flex-1 min-w-[200px] flex gap-2">
+              <Input placeholder="Search order #, customer, carrier..." value={searchInput}
+                onChange={e => setSearchInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} data-testid="search-orders" />
+              <Button onClick={handleSearch} variant="outline"><Search className="w-4 h-4" /></Button>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="filter-order-status">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(0); }}>
+              <SelectTrigger className="w-[160px]" data-testid="order-status-filter"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1)}
-                  </SelectItem>
-                ))}
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         </div>
-
-        {/* Table */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm text-slate-600">Showing {orders.length} of {total.toLocaleString()} orders</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage(0)} disabled={page === 0}>First</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page === 0}><ChevronLeft className="w-4 h-4" /></Button>
+            <span className="text-sm text-slate-600 min-w-[100px] text-center">Page {page + 1} of {totalPages || 1}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}><ChevronRight className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}>Last</Button>
+          </div>
+        </div>
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">No orders found</p>
-            </div>
+            <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-12" data-testid="no-orders"><Package className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">No orders yet. Convert quotes to create orders.</p></div>
           ) : (
-            <table className="w-full data-table">
-              <thead>
-                <tr>
-                  <th>Order #</th>
-                  <th>Route</th>
-                  <th>Carrier</th>
-                  <th>Pickup</th>
-                  <th>Delivery</th>
-                  <th>Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => {
-                  const quote = getQuoteForOrder(order.quote_id);
-                  const carrier = getCarrierForOrder(order.carrier_id);
-                  return (
-                    <tr key={order.id} data-testid={`order-row-${order.id}`}>
-                      <td>
-                        <span className="font-mono font-medium text-slate-900">{order.order_number}</span>
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-slate-400" />
-                          <span className="text-slate-700">
-                            {quote?.pickup_city}, {quote?.pickup_state} → {quote?.delivery_city}, {quote?.delivery_state}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        {carrier ? (
-                          <div className="flex items-center gap-2">
-                            <Truck className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-700">{carrier.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">Not assigned</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className="font-mono text-sm text-slate-600">
-                          {order.pickup_date ? new Date(order.pickup_date).toLocaleDateString() : '-'}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="orders-table">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Order #</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Quote #</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Customer</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Phone</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Route</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Price</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Carrier</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {orders.map(o => (
+                    <tr key={o.id} className="hover:bg-slate-50 transition-colors" data-testid={`order-row-${o.id}`}>
+                      <td className="px-3 py-2.5"><span className="font-mono text-xs font-semibold text-emerald-600">{o.order_number}</span></td>
+                      <td className="px-3 py-2.5"><span className="font-mono text-xs text-blue-600">{o.quote_number}</span></td>
+                      <td className="px-3 py-2.5 font-medium text-slate-900 text-xs">{o.customer_name}</td>
+                      <td className="px-3 py-2.5 text-slate-600 text-xs">{o.phone || '-'}</td>
+                      <td className="px-3 py-2.5 text-xs text-slate-700">{[o.pickup_city, o.pickup_state].filter(Boolean).join(', ')} → {[o.delivery_city, o.delivery_state].filter(Boolean).join(', ')}</td>
+                      <td className="px-3 py-2.5"><span className="font-mono font-bold text-emerald-600 text-xs">${o.price?.toLocaleString() || '0'}</span></td>
+                      <td className="px-3 py-2.5 text-xs text-slate-700">{o.carrier_name || '-'}</td>
+                      <td className="px-3 py-2.5">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[o.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {statusLabels[o.status] || o.status}
                         </span>
                       </td>
-                      <td>
-                        <span className="font-mono text-sm text-slate-600">
-                          {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString() : '-'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          {order.status === 'in_transit' && <span className="live-dot" />}
-                          <span className={`status-badge ${getStatusClass(order.status)}`}>
-                            {order.status?.replace('_', ' ')}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/orders/${order.id}`)}
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            data-testid={`view-order-${order.id}`}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => { setEditingOrder(order); setIsDialogOpen(true); }}
-                            data-testid={`edit-order-${order.id}`}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"
+                            onClick={() => setQuickView(o)} title="Quick View"><Eye className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"
+                            onClick={() => navigate(`/orders/${o.id}`)} title="Full Details"><Truck className="w-3.5 h-3.5" /></Button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-
-        {/* Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingOrder ? 'Edit Order' : 'Create New Order'}</DialogTitle>
-            </DialogHeader>
-            <OrderForm
-              order={editingOrder}
-              quotes={quotes}
-              carriers={carriers}
-              onSubmit={editingOrder ? handleUpdate : handleCreate}
-              onCancel={() => { setIsDialogOpen(false); setEditingOrder(null); }}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* Quick View */}
+      <Dialog open={!!quickView} onOpenChange={() => setQuickView(null)}>
+        <DialogContent className="max-w-lg" data-testid="order-quick-view">
+          <DialogHeader><DialogTitle>Order {quickView?.order_number}</DialogTitle></DialogHeader>
+          {quickView && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-slate-500">Quote:</span> <span className="font-mono font-medium">{quickView.quote_number}</span></div>
+                <div><span className="text-slate-500">Customer:</span> <span className="font-medium">{quickView.customer_name}</span></div>
+                <div><span className="text-slate-500">Phone:</span> <span className="font-medium">{quickView.phone || '-'}</span></div>
+                <div><span className="text-slate-500">Email:</span> <span className="font-medium">{quickView.email || '-'}</span></div>
+                <div><span className="text-slate-500">Vehicle:</span> <span className="font-medium">{[quickView.vehicle_year, quickView.vehicle_make, quickView.vehicle_model].filter(Boolean).join(' ')}</span></div>
+                <div><span className="text-slate-500">Price:</span> <span className="font-bold text-emerald-600">${quickView.price?.toLocaleString()}</span></div>
+                <div><span className="text-slate-500">Route:</span> <span className="font-medium">{quickView.pickup_city} → {quickView.delivery_city}</span></div>
+                <div><span className="text-slate-500">Status:</span> <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[quickView.status]}`}>{statusLabels[quickView.status]}</span></div>
+                <div><span className="text-slate-500">Carrier:</span> <span className="font-medium">{quickView.carrier_name || 'Not assigned'}</span></div>
+                <div><span className="text-slate-500">Driver:</span> <span className="font-medium">{quickView.driver_name || '-'}</span></div>
+              </div>
+              <div className="flex gap-2 pt-2 border-t">
+                <Button onClick={() => { setQuickView(null); navigate(`/orders/${quickView.id}`); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">
+                  View Full Details
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

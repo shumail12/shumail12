@@ -18,10 +18,8 @@ import {
 const getNavigation = (isSuperAdmin) => {
   const baseNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Leads', href: '/leads', icon: Users },
     { name: 'Quotes', href: '/quotes', icon: FileText },
     { name: 'Orders', href: '/orders', icon: Package },
-    { name: 'Dispatch', href: '/dispatch', icon: Truck },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];
 
@@ -53,8 +51,8 @@ export const Sidebar = () => {
           <Truck className="w-5 h-5 text-white" />
         </div>
         <div>
-          <span className="text-lg font-heading font-bold text-white">Shumail</span>
-          <span className="text-blue-400 text-sm ml-1">Tech</span>
+          <span className="text-lg font-heading font-bold text-white">Breamway</span>
+          <span className="text-blue-400 text-xs ml-1 block -mt-1">Auto Transport</span>
         </div>
       </div>
 
