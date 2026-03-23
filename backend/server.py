@@ -122,6 +122,125 @@ async def ensure_superadmin():
     )
     key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
     logging.info(f"Vendor API Key: {key_doc['key']}")
+    # Auto-import CSV data if DB is empty
+    quote_count = await db.quotes.count_documents({})
+    if quote_count < 100:
+        logging.info(f"DB has only {quote_count} quotes. Starting auto-import...")
+        await auto_import_csv_data()
+
+
+async def auto_import_csv_data():
+    """Import CSV data files into quotes collection on first startup"""
+    import csv
+    import re
+
+    def parse_price(price_str):
+        if not price_str: return 0.0
+        cleaned = re.sub(r'[,$]', '', str(price_str))
+        try: return float(cleaned)
+        except: return 0.0
+
+    def parse_year(year_str):
+        if not year_str: return ""
+        cleaned = re.sub(r'[,\s]', '', str(year_str))
+        try: return str(int(float(cleaned)))
+        except: return str(year_str).strip()
+
+    def extract_city_state(loc):
+        if not loc: return '', ''
+        parts = loc.split(',')
+        if len(parts) >= 2: return parts[0].strip(), parts[-1].strip()
+        return loc.strip(), ''
+
+    data_dir = Path(__file__).parent
+    quotes_to_import = []
+    seq = 0
+
+    # File 1: Breamway All Quotes
+    file1 = data_dir / 'data_breamway_quotes.csv'
+    if file1.exists():
+        logging.info(f"Importing {file1}...")
+        with open(file1, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                name = (row.get('Name') or '').strip()
+                if not name: continue
+                seq += 1
+                p_city, p_state = extract_city_state(row.get('Pickup', ''))
+                d_city, d_state = extract_city_state(row.get('Delivery', ''))
+                quotes_to_import.append({
+                    "id": str(uuid.uuid4()), "quote_number": f"BR{seq:06d}",
+                    "agent_name": (row.get('Sales Agent') or '').strip(),
+                    "customer_name": name, "phone": (row.get('Phone') or '').strip(),
+                    "email": (row.get('Email Address') or '').strip(),
+                    "vehicle_year": parse_year(row.get('Year', '')),
+                    "vehicle_make": (row.get('Make') or '').strip(),
+                    "vehicle_model": (row.get('Model') or '').strip(),
+                    "pickup_address": (row.get('Pickup') or '').strip(),
+                    "pickup_city": p_city, "pickup_state": p_state,
+                    "delivery_address": (row.get('Delivery') or '').strip(),
+                    "delivery_city": d_city, "delivery_state": d_state,
+                    "pickup_date": (row.get('Pickup Date') or '').strip() or None,
+                    "shipping_type": "standard",
+                    "price": parse_price(row.get('Total Price', '0')),
+                    "deposit_fee": parse_price(row.get('Deposit Fee', '150')),
+                    "carrier_fee": parse_price(row.get('Carrier Fee', '0')),
+                    "source": (row.get('Lead Source') or '').strip(),
+                    "status": "quoted", "notes": "",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+        logging.info(f"  Parsed {seq} from file 1")
+
+    # File 2: Export
+    file2 = data_dir / 'data_export2.csv'
+    if file2.exists():
+        logging.info(f"Importing {file2}...")
+        count2 = 0
+        with open(file2, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                name = (row.get('Name') or '').strip()
+                if not name: continue
+                seq += 1; count2 += 1
+                p_city = (row.get('Pickup City') or '').strip()
+                p_state = (row.get('Pickup State') or '').strip()
+                d_city = (row.get('Delivery City') or '').strip()
+                d_state = (row.get('Delivery State') or '').strip()
+                quotes_to_import.append({
+                    "id": str(uuid.uuid4()), "quote_number": f"BR{seq:06d}",
+                    "agent_name": (row.get('Sales Agent') or '').strip(),
+                    "customer_name": name, "phone": (row.get('Phone') or '').strip(),
+                    "email": (row.get('Email Address') or '').strip(),
+                    "vehicle_year": parse_year(row.get('Year', '')),
+                    "vehicle_make": (row.get('Make') or '').strip(),
+                    "vehicle_model": (row.get('Model') or '').strip(),
+                    "pickup_address": f"{p_city}, {p_state}" if p_city else "",
+                    "pickup_city": p_city, "pickup_state": p_state,
+                    "delivery_address": f"{d_city}, {d_state}" if d_city else "",
+                    "delivery_city": d_city, "delivery_state": d_state,
+                    "pickup_date": (row.get('Pickup Date') or '').strip() or None,
+                    "shipping_type": "standard",
+                    "price": parse_price(row.get('Total Price', '0')),
+                    "deposit_fee": 150.0, "carrier_fee": 0.0,
+                    "source": "", "status": "quoted", "notes": "",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+        logging.info(f"  Parsed {count2} from file 2")
+
+    if quotes_to_import:
+        # Clear any existing data first
+        await db.quotes.delete_many({})
+        # Insert in batches
+        batch_size = 5000
+        for i in range(0, len(quotes_to_import), batch_size):
+            batch = quotes_to_import[i:i+batch_size]
+            await db.quotes.insert_many(batch)
+            logging.info(f"  Inserted batch {i//batch_size + 1} ({len(batch)} records)")
+        # Update counter
+        await db.counters.update_one({"_id": "quote_seq"}, {"$set": {"seq": seq}}, upsert=True)
+        logging.info(f"Auto-import complete! Total: {seq} quotes (BR000001 to BR{seq:06d})")
 
 
 async def get_next_quote_number():
