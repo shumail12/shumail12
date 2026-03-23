@@ -25,6 +25,12 @@ api.interceptors.response.use(
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
 
+// Leads
+export const getLeads = (params = {}) => api.get('/leads', { params });
+export const getLead = (id) => api.get(`/leads/${id}`);
+export const updateLead = (id, data) => api.put(`/leads/${id}`, data);
+export const convertLeadToQuote = (id) => api.post(`/leads/${id}/convert-to-quote`);
+
 // Quotes (main entity — replaces leads)
 export const getQuotes = (params = {}) => api.get('/quotes', { params });
 export const getQuotesAgents = () => api.get('/quotes/agents/list');

@@ -1,415 +1,177 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
-import { getLeads, createLead, updateLead, deleteLead } from '../lib/api';
+import { getLeads, convertLeadToQuote } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '../components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import { Plus, Search, Edit, Trash2, Phone, Mail, Car, Eye } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Users, ArrowRightCircle, Car, FileText, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-
-const vehicleTypes = ['Sedan', 'SUV', 'Truck', 'Van', 'Motorcycle', 'Coupe', 'Convertible', 'Other'];
-const statusOptions = ['new', 'contacted', 'quoted', 'converted', 'lost'];
-
-const LeadForm = ({ lead, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState(lead || {
-    customer_name: '',
-    phone: '',
-    email: '',
-    vehicle_year: new Date().getFullYear(),
-    vehicle_make: '',
-    vehicle_model: '',
-    vehicle_type: 'Sedan',
-    status: 'new',
-    notes: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSubmit(formData);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="form-label">Customer Name *</Label>
-          <Input
-            value={formData.customer_name}
-            onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-            className="form-input"
-            required
-            data-testid="lead-customer-name"
-          />
-        </div>
-        <div>
-          <Label className="form-label">Email *</Label>
-          <Input
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="form-input"
-            required
-            data-testid="lead-email"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label className="form-label">Phone *</Label>
-          <Input
-            value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className="form-input"
-            required
-            data-testid="lead-phone"
-          />
-        </div>
-        <div>
-          <Label className="form-label">Status</Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => setFormData({ ...formData, status: value })}
-          >
-            <SelectTrigger data-testid="lead-status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="border-t border-slate-200 pt-4 mt-4">
-        <h4 className="font-medium text-slate-900 mb-3">Vehicle Information</h4>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <Label className="form-label">Year *</Label>
-            <Input
-              type="number"
-              value={formData.vehicle_year}
-              onChange={(e) => setFormData({ ...formData, vehicle_year: parseInt(e.target.value) })}
-              className="form-input"
-              required
-              data-testid="lead-vehicle-year"
-            />
-          </div>
-          <div>
-            <Label className="form-label">Make *</Label>
-            <Input
-              value={formData.vehicle_make}
-              onChange={(e) => setFormData({ ...formData, vehicle_make: e.target.value })}
-              className="form-input"
-              placeholder="e.g., Toyota"
-              required
-              data-testid="lead-vehicle-make"
-            />
-          </div>
-          <div>
-            <Label className="form-label">Model *</Label>
-            <Input
-              value={formData.vehicle_model}
-              onChange={(e) => setFormData({ ...formData, vehicle_model: e.target.value })}
-              className="form-input"
-              placeholder="e.g., Camry"
-              required
-              data-testid="lead-vehicle-model"
-            />
-          </div>
-        </div>
-        <div className="mt-4">
-          <Label className="form-label">Vehicle Type</Label>
-          <Select
-            value={formData.vehicle_type}
-            onValueChange={(value) => setFormData({ ...formData, vehicle_type: value })}
-          >
-            <SelectTrigger data-testid="lead-vehicle-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {vehicleTypes.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div>
-        <Label className="form-label">Notes</Label>
-        <textarea
-          value={formData.notes || ''}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          className="form-input min-h-[80px] resize-none"
-          data-testid="lead-notes"
-        />
-      </div>
-
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" className="bg-blue-600 hover:bg-blue-700" data-testid="lead-submit">
-          {lead ? 'Update Lead' : 'Create Lead'}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-};
 
 const Leads = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState(null);
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(100);
+  const [quickView, setQuickView] = useState(null);
 
-  const fetchLeads = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await getLeads();
-      setLeads(response.data);
-    } catch (error) {
-      toast.error('Failed to fetch leads');
-    } finally {
-      setLoading(false);
+      const params = { skip: page * pageSize, limit: pageSize };
+      if (search) params.search = search;
+      const res = await getLeads(params);
+      setLeads(res.data.leads);
+      setTotal(res.data.total);
+    } catch { toast.error('Failed to fetch leads'); }
+    finally { setLoading(false); }
+  }, [page, pageSize, search]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleSearch = () => { setSearch(searchInput); setPage(0); };
+
+  const handleConvertToQuote = async (lead) => {
+    try {
+      await convertLeadToQuote(lead.id);
+      toast.success(`Lead ${lead.quote_number} converted to quote!`);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to convert');
     }
   };
 
-  useEffect(() => {
-    fetchLeads();
-  }, []);
-
-  const handleCreate = async (data) => {
-    try {
-      await createLead(data);
-      toast.success('Lead created successfully');
-      setIsDialogOpen(false);
-      fetchLeads();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create lead');
-    }
-  };
-
-  const handleUpdate = async (data) => {
-    try {
-      await updateLead(editingLead.id, data);
-      toast.success('Lead updated successfully');
-      setIsDialogOpen(false);
-      setEditingLead(null);
-      fetchLeads();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update lead');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this lead?')) return;
-    try {
-      await deleteLead(id);
-      toast.success('Lead deleted successfully');
-      fetchLeads();
-    } catch (error) {
-      toast.error('Failed to delete lead');
-    }
-  };
-
-  const getStatusClass = (status) => {
-    const statusMap = {
-      new: 'status-new',
-      contacted: 'status-contacted',
-      quoted: 'status-quoted',
-      converted: 'status-converted',
-      lost: 'status-lost'
-    };
-    return statusMap[status] || 'status-new';
-  };
-
-  const filteredLeads = leads.filter((lead) => {
-    const matchesSearch = 
-      lead.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-      lead.email.toLowerCase().includes(search.toLowerCase()) ||
-      lead.phone.includes(search);
-    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <Layout>
       <Header title="Leads">
-        <Button
-          onClick={() => { setEditingLead(null); setIsDialogOpen(true); }}
-          className="bg-blue-600 hover:bg-blue-700"
-          data-testid="create-lead-btn"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Lead
+        <Button onClick={() => navigate('/leads/new')} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="new-lead-btn">
+          <Plus className="w-4 h-4 mr-2" /> New Lead
         </Button>
       </Header>
-
       <div className="p-6" data-testid="leads-page">
         {/* Filters */}
-        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search leads..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 form-input"
-                  data-testid="search-leads"
-                />
-              </div>
+        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-5">
+          <div className="flex gap-3">
+            <div className="flex-1 flex gap-2">
+              <Input placeholder="Search name, phone, email, city..." value={searchInput}
+                onChange={e => setSearchInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()}
+                data-testid="search-leads" />
+              <Button onClick={handleSearch} variant="outline"><Search className="w-4 h-4" /></Button>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="filter-status">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </div>
-
+        {/* Pagination */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm text-slate-600" data-testid="leads-count">Showing {leads.length} of {total.toLocaleString()} leads</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage(0)} disabled={page === 0}>First</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p - 1)} disabled={page === 0}><ChevronLeft className="w-4 h-4" /></Button>
+            <span className="text-sm text-slate-600 min-w-[100px] text-center">Page {page + 1} of {totalPages || 1}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1}><ChevronRight className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}>Last</Button>
+          </div>
+        </div>
         {/* Table */}
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
-            </div>
-          ) : filteredLeads.length === 0 ? (
-            <div className="text-center py-12">
-              <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500">No leads found</p>
-            </div>
+            <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>
+          ) : leads.length === 0 ? (
+            <div className="text-center py-12" data-testid="no-leads"><Users className="w-12 h-12 text-slate-300 mx-auto mb-3" /><p className="text-slate-500">No leads yet. New vendor leads will appear here.</p></div>
           ) : (
-            <table className="w-full data-table">
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Contact</th>
-                  <th>Vehicle</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLeads.map((lead) => (
-                  <tr key={lead.id} data-testid={`lead-row-${lead.id}`}>
-                    <td>
-                      <p className="font-medium text-slate-900">{lead.customer_name}</p>
-                    </td>
-                    <td>
-                      <div className="flex flex-col gap-1">
-                        <span className="flex items-center gap-1.5 text-slate-600">
-                          <Mail className="w-3.5 h-3.5" />
-                          {lead.email}
-                        </span>
-                        <span className="flex items-center gap-1.5 text-slate-600">
-                          <Phone className="w-3.5 h-3.5" />
-                          {lead.phone}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <p className="font-mono text-sm">
-                        {lead.vehicle_year} {lead.vehicle_make} {lead.vehicle_model}
-                      </p>
-                      <p className="text-xs text-slate-500">{lead.vehicle_type}</p>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${getStatusClass(lead.status)}`}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="font-mono text-sm text-slate-600">
-                        {new Date(lead.created_at).toLocaleDateString()}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/leads/${lead.id}`)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          data-testid={`view-lead-${lead.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setEditingLead(lead); setIsDialogOpen(true); }}
-                          data-testid={`edit-lead-${lead.id}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(lead.id)}
-                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                          data-testid={`delete-lead-${lead.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="leads-table">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">ID</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Customer</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Phone</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Email</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Vehicle</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Pickup</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Delivery</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Source</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {leads.map(lead => (
+                    <tr key={lead.id} className="hover:bg-slate-50 transition-colors" data-testid={`lead-row-${lead.id}`}>
+                      <td className="px-3 py-2.5"><span className="font-mono text-xs font-semibold text-blue-600">{lead.quote_number}</span></td>
+                      <td className="px-3 py-2.5 font-medium text-slate-900 text-xs">{lead.customer_name}</td>
+                      <td className="px-3 py-2.5 text-slate-600 text-xs">{lead.phone || '-'}</td>
+                      <td className="px-3 py-2.5 text-slate-600 text-xs truncate max-w-[160px]">{lead.email || '-'}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        <button onClick={() => window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${lead.vehicle_year} ${lead.vehicle_make} ${lead.vehicle_model}`)}`, '_blank')}
+                          className="text-blue-600 hover:underline cursor-pointer">
+                          {[lead.vehicle_year, lead.vehicle_make, lead.vehicle_model].filter(Boolean).join(' ') || '-'}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-slate-700">{[lead.pickup_city, lead.pickup_state].filter(Boolean).join(', ') || '-'}</td>
+                      <td className="px-3 py-2.5 text-xs text-slate-700">{[lead.delivery_city, lead.delivery_state].filter(Boolean).join(', ') || '-'}</td>
+                      <td className="px-3 py-2.5 text-xs text-slate-500">{lead.source || '-'}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"
+                            onClick={() => setQuickView(lead)} title="Quick View" data-testid={`lead-quick-view-${lead.id}`}>
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"
+                            onClick={() => navigate(`/leads/${lead.id}`)} title="Full Details">
+                            <FileText className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-emerald-600"
+                            onClick={() => handleConvertToQuote(lead)} title="Convert to Quote" data-testid={`convert-quote-${lead.id}`}>
+                            <ArrowRightCircle className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-
-        {/* Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingLead ? 'Edit Lead' : 'Create New Lead'}</DialogTitle>
-            </DialogHeader>
-            <LeadForm
-              lead={editingLead}
-              onSubmit={editingLead ? handleUpdate : handleCreate}
-              onCancel={() => { setIsDialogOpen(false); setEditingLead(null); }}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* Quick View */}
+      <Dialog open={!!quickView} onOpenChange={() => setQuickView(null)}>
+        <DialogContent className="max-w-lg" data-testid="lead-quick-view-modal">
+          <DialogHeader><DialogTitle>Lead {quickView?.quote_number}</DialogTitle></DialogHeader>
+          {quickView && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-slate-500">Customer:</span> <span className="font-medium">{quickView.customer_name}</span></div>
+                <div><span className="text-slate-500">Phone:</span> <span className="font-medium">{quickView.phone || '-'}</span></div>
+                <div><span className="text-slate-500">Email:</span> <span className="font-medium">{quickView.email || '-'}</span></div>
+                <div><span className="text-slate-500">Source:</span> <span className="font-medium">{quickView.source || '-'}</span></div>
+                <div><span className="text-slate-500">Vehicle:</span> <span className="font-medium">{[quickView.vehicle_year, quickView.vehicle_make, quickView.vehicle_model].filter(Boolean).join(' ') || '-'}</span></div>
+                <div><span className="text-slate-500">Pickup:</span> <span className="font-medium">{quickView.pickup_address || [quickView.pickup_city, quickView.pickup_state].filter(Boolean).join(', ') || '-'}</span></div>
+                <div><span className="text-slate-500">Delivery:</span> <span className="font-medium">{quickView.delivery_address || [quickView.delivery_city, quickView.delivery_state].filter(Boolean).join(', ') || '-'}</span></div>
+              </div>
+              <div className="flex gap-2 pt-2 border-t">
+                <Button onClick={() => { setQuickView(null); navigate(`/leads/${quickView.id}`); }} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">
+                  View Full Details
+                </Button>
+                <Button onClick={() => { handleConvertToQuote(quickView); setQuickView(null); }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="quick-convert-quote">
+                  Convert to Quote
+                </Button>
+                <Button variant="outline" onClick={() => window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${quickView.vehicle_year} ${quickView.vehicle_make} ${quickView.vehicle_model}`)}`, '_blank')}>
+                  <Car className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

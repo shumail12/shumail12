@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Save, Car, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Save, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusOptions = [
@@ -46,6 +46,8 @@ const OrderDetail = () => {
         carrier_mc: form.carrier_mc,
         driver_name: form.driver_name,
         driver_phone: form.driver_phone,
+        pickup_date: form.pickup_date,
+        delivery_date: form.delivery_date,
         dispatch_notes: form.dispatch_notes,
         status: form.status,
       });
@@ -96,12 +98,12 @@ const OrderDetail = () => {
                   {vehicleSearch || '-'} <ExternalLink className="w-3 h-3" />
                 </button>
               </div>
-              <div><span className="text-slate-500 text-xs block">Pickup</span><span className="font-medium">{[order?.pickup_city, order?.pickup_state].filter(Boolean).join(', ')}</span></div>
-              <div><span className="text-slate-500 text-xs block">Delivery</span><span className="font-medium">{[order?.delivery_city, order?.delivery_state].filter(Boolean).join(', ')}</span></div>
+              <div><span className="text-slate-500 text-xs block">Pickup Location</span><span className="font-medium">{[order?.pickup_city, order?.pickup_state].filter(Boolean).join(', ')}</span></div>
+              <div><span className="text-slate-500 text-xs block">Delivery Location</span><span className="font-medium">{[order?.delivery_city, order?.delivery_state].filter(Boolean).join(', ')}</span></div>
             </div>
           </div>
 
-          {/* Dispatch Info (editable) */}
+          {/* Dispatch & Carrier (editable) */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="font-semibold text-slate-900 mb-4">Dispatch & Carrier</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -117,6 +119,21 @@ const OrderDetail = () => {
               <div><Label>Carrier Phone</Label><Input value={form.carrier_phone || ''} onChange={e => setForm(f => ({...f, carrier_phone: e.target.value}))} /></div>
               <div><Label>Driver Name</Label><Input value={form.driver_name || ''} onChange={e => setForm(f => ({...f, driver_name: e.target.value}))} data-testid="input-driver-name" /></div>
               <div><Label>Driver Phone</Label><Input value={form.driver_phone || ''} onChange={e => setForm(f => ({...f, driver_phone: e.target.value}))} /></div>
+            </div>
+          </div>
+
+          {/* Pickup & Delivery Dates */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-900 mb-4">Pickup & Delivery Dates</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Pickup Date</Label>
+                <Input type="date" value={form.pickup_date || ''} onChange={e => setForm(f => ({...f, pickup_date: e.target.value}))} data-testid="input-pickup-date" />
+              </div>
+              <div>
+                <Label>Delivery Date</Label>
+                <Input type="date" value={form.delivery_date || ''} onChange={e => setForm(f => ({...f, delivery_date: e.target.value}))} data-testid="input-delivery-date" />
+              </div>
             </div>
           </div>
 

@@ -9,6 +9,8 @@ import { Toaster } from "./components/ui/sonner";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
+import Leads from "./pages/Leads";
+import LeadDetail from "./pages/LeadDetail";
 import Quotes from "./pages/Quotes";
 import QuoteDetail from "./pages/QuoteDetail";
 import Orders from "./pages/Orders";
@@ -86,6 +88,9 @@ function AppRoutes() {
         }
       />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/leads" element={<ProtectedRoute><Leads /></ProtectedRoute>} />
+      <Route path="/leads/new" element={<ProtectedRoute><LeadDetail /></ProtectedRoute>} />
+      <Route path="/leads/:id" element={<ProtectedRoute><LeadDetail /></ProtectedRoute>} />
       <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
       <Route path="/quotes/new" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />
       <Route path="/quotes/:id" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />

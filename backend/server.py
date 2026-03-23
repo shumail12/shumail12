@@ -356,6 +356,8 @@ class OrderCreateInput(BaseModel):
     carrier_mc: Optional[str] = ""
     driver_name: Optional[str] = ""
     driver_phone: Optional[str] = ""
+    pickup_date: Optional[str] = ""
+    delivery_date: Optional[str] = ""
     dispatch_notes: Optional[str] = ""
     status: str = "pending"  # pending, assigned, picked_up, in_transit, delivered
 
@@ -365,6 +367,8 @@ class OrderUpdateInput(BaseModel):
     carrier_mc: Optional[str] = None
     driver_name: Optional[str] = None
     driver_phone: Optional[str] = None
+    pickup_date: Optional[str] = None
+    delivery_date: Optional[str] = None
     dispatch_notes: Optional[str] = None
     status: Optional[str] = None
 
@@ -621,6 +625,63 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
     }
 
 
+# ==================== LEAD ROUTES ====================
+
+@api_router.get("/leads")
+async def get_leads(
+    skip: int = 0, limit: int = 100,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get leads (quotes with status='lead')"""
+    query = {"status": "lead"}
+    if search:
+        query["$or"] = [
+            {"quote_number": {"$regex": search, "$options": "i"}},
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"pickup_city": {"$regex": search, "$options": "i"}},
+            {"delivery_city": {"$regex": search, "$options": "i"}},
+            {"vehicle_make": {"$regex": search, "$options": "i"}},
+        ]
+    total = await db.quotes.count_documents(query)
+    leads = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"leads": leads, "total": total}
+
+@api_router.get("/leads/{lead_id}")
+async def get_lead(lead_id: str, current_user: User = Depends(get_current_user)):
+    lead = await db.quotes.find_one({"id": lead_id, "status": "lead"}, {"_id": 0})
+    if not lead:
+        lead = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
+@api_router.put("/leads/{lead_id}")
+async def update_lead(lead_id: str, data: QuoteUpdateInput, current_user: User = Depends(get_current_user)):
+    existing = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.quotes.update_one({"id": lead_id}, {"$set": update_dict})
+    updated = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/leads/{lead_id}/convert-to-quote")
+async def convert_lead_to_quote(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Convert a lead to a quote (changes status from 'lead' to 'quoted')"""
+    lead = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.get("status") != "lead":
+        raise HTTPException(status_code=400, detail="This record is already a quote or order")
+    await db.quotes.update_one({"id": lead_id}, {"$set": {"status": "quoted", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    return updated
+
+
 # ==================== QUOTE ROUTES (Main Entity) ====================
 
 @api_router.post("/quotes")
@@ -736,6 +797,8 @@ async def convert_quote_to_order(quote_id: str, current_user: User = Depends(get
         "carrier_mc": "",
         "driver_name": "",
         "driver_phone": "",
+        "pickup_date": quote.get("pickup_date", ""),
+        "delivery_date": "",
         "dispatch_notes": "",
         "status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat(),

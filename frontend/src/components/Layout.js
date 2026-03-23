@@ -17,11 +17,13 @@ import {
   FileEdit,
   X,
   CheckCheck,
+  Users,
 } from 'lucide-react';
 
 const getNavigation = (isSuperAdmin) => {
   const baseNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Leads', href: '/leads', icon: Users },
     { name: 'Quotes', href: '/quotes', icon: FileText },
     { name: 'Orders', href: '/orders', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
