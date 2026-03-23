@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
-import { getQuotes, getQuotesCount, getQuotesAgents, createQuote, updateQuote, getLeads } from '../lib/api';
+import { getQuotesEnriched, getQuotesAgents, updateQuote } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -19,9 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { Plus, Search, Edit, FileText, Eye, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, FileText, Eye, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const statusOptions = ['pending', 'approved', 'rejected', 'converted'];
@@ -57,14 +56,13 @@ const Quotes = () => {
       if (assignedFilter !== 'all') params.assigned_to = assignedFilter;
       if (search) params.search = search;
 
-      const [quotesRes, countRes, agentsRes] = await Promise.all([
-        getQuotes(params),
-        getQuotesCount(params),
+      const [enrichedRes, agentsRes] = await Promise.all([
+        getQuotesEnriched(params),
         getQuotesAgents()
       ]);
       
-      setQuotes(quotesRes.data);
-      setTotalQuotes(countRes.data.total);
+      setQuotes(enrichedRes.data.quotes);
+      setTotalQuotes(enrichedRes.data.total);
       setAgents(agentsRes.data);
     } catch (error) {
       toast.error('Failed to fetch quotes');
@@ -99,16 +97,6 @@ const Quotes = () => {
     }
   };
 
-  const getStatusClass = (status) => {
-    const statusMap = {
-      pending: 'status-pending',
-      approved: 'status-approved',
-      rejected: 'status-rejected',
-      converted: 'status-converted'
-    };
-    return statusMap[status] || 'status-pending';
-  };
-
   const totalPages = Math.ceil(totalQuotes / pageSize);
 
   return (
@@ -117,6 +105,7 @@ const Quotes = () => {
         <Button
           onClick={() => navigate('/leads')}
           variant="outline"
+          data-testid="create-from-lead-btn"
         >
           Create from Lead
         </Button>
@@ -129,20 +118,20 @@ const Quotes = () => {
             <div className="flex-1 min-w-[200px]">
               <div className="relative flex gap-2">
                 <Input
-                  placeholder="Search quotes, cities, agents..."
+                  placeholder="Search by name, phone, email, city..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                   className="form-input"
                   data-testid="search-quotes"
                 />
-                <Button onClick={handleSearch} variant="outline">
+                <Button onClick={handleSearch} variant="outline" data-testid="search-quotes-btn">
                   <Search className="w-4 h-4" />
                 </Button>
               </div>
             </div>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-[150px]" data-testid="status-filter">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -155,7 +144,7 @@ const Quotes = () => {
               </SelectContent>
             </Select>
             <Select value={assignedFilter} onValueChange={(v) => { setAssignedFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px]" data-testid="agent-filter">
                 <SelectValue placeholder="Agent" />
               </SelectTrigger>
               <SelectContent>
@@ -172,14 +161,14 @@ const Quotes = () => {
 
         {/* Stats & Pagination */}
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600" data-testid="quotes-count">
             Showing {quotes.length} of {totalQuotes.toLocaleString()} quotes
           </p>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">Per page:</span>
               <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v)); setPage(0); }}>
-                <SelectTrigger className="w-[100px]">
+                <SelectTrigger className="w-[100px]" data-testid="page-size-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -191,39 +180,19 @@ const Quotes = () => {
               </Select>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(0)}
-                disabled={page === 0}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage(0)} disabled={page === 0} data-testid="first-page-btn">
                 First
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} data-testid="prev-page-btn">
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <span className="text-sm text-slate-600 min-w-[100px] text-center">
+              <span className="text-sm text-slate-600 min-w-[100px] text-center" data-testid="page-indicator">
                 Page {page + 1} of {totalPages || 1}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => p + 1)}
-                disabled={page >= totalPages - 1}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1} data-testid="next-page-btn">
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(totalPages - 1)}
-                disabled={page >= totalPages - 1}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1} data-testid="last-page-btn">
                 Last
               </Button>
             </div>
@@ -237,98 +206,91 @@ const Quotes = () => {
               <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
             </div>
           ) : quotes.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-12" data-testid="no-quotes-message">
               <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
               <p className="text-slate-500">No quotes found</p>
             </div>
           ) : (
-            <table className="w-full data-table">
-              <thead>
-                <tr>
-                  <th>Quote #</th>
-                  <th>Route</th>
-                  <th>Price</th>
-                  <th>Assigned To</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quotes.map((quote) => (
-                  <tr key={quote.id} className="hover:bg-slate-50">
-                    <td>
-                      <span className="font-mono font-medium text-slate-900">{quote.quote_number}</span>
-                    </td>
-                    <td>
-                      <div className="text-sm">
-                        <span className="text-slate-700">{quote.pickup_city}, {quote.pickup_state}</span>
-                        <span className="text-slate-400 mx-1">→</span>
-                        <span className="text-slate-700">{quote.delivery_city}, {quote.delivery_state}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="font-mono font-medium text-emerald-600">
-                        ${quote.price?.toLocaleString()}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="text-sm text-slate-600">{quote.assigned_to || '-'}</span>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${getStatusClass(quote.status)}`}>
-                        {quote.status}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="font-mono text-sm text-slate-500">
-                        {new Date(quote.created_at).toLocaleDateString()}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/quotes/${quote.id}`)}
-                          className="text-blue-600 hover:bg-blue-50"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {isSuperAdmin && (
+            <div className="overflow-x-auto">
+              <table className="w-full data-table" data-testid="quotes-table">
+                <thead>
+                  <tr>
+                    <th>Customer Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Pickup Address</th>
+                    <th>Drop-off Address</th>
+                    <th>Price</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quotes.map((quote) => (
+                    <tr key={quote.id} className="hover:bg-slate-50" data-testid={`quote-row-${quote.id}`}>
+                      <td>
+                        <span className="font-medium text-slate-900">{quote.customer_name || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="text-sm text-slate-700">{quote.customer_phone || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="text-sm text-slate-700 truncate block max-w-[200px]">{quote.customer_email || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="text-sm text-slate-900">
+                          {[quote.pickup_city, quote.pickup_state].filter(Boolean).join(', ') || '-'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="text-sm text-slate-900">
+                          {[quote.delivery_city, quote.delivery_state].filter(Boolean).join(', ') || '-'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-mono font-bold text-emerald-600" data-testid={`quote-price-${quote.id}`}>
+                          ${quote.price?.toLocaleString() || '0'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => { 
-                              setAssigningQuote(quote); 
-                              setSelectedUser(quote.assigned_to || ''); 
-                              setIsAssignDialogOpen(true); 
-                            }}
-                            className="text-violet-600 hover:bg-violet-50"
+                            onClick={() => navigate(`/quotes/${quote.id}`)}
+                            className="text-blue-600 hover:bg-blue-50"
+                            data-testid={`view-quote-${quote.id}`}
                           >
-                            <UserPlus className="w-4 h-4" />
+                            <Eye className="w-4 h-4" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/quotes/${quote.id}`)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {isSuperAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { 
+                                setAssigningQuote(quote); 
+                                setSelectedUser(quote.assigned_to || ''); 
+                                setIsAssignDialogOpen(true); 
+                              }}
+                              className="text-violet-600 hover:bg-violet-50"
+                              data-testid={`assign-quote-${quote.id}`}
+                            >
+                              <UserPlus className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* Assign Dialog */}
         {isSuperAdmin && (
           <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md" data-testid="assign-dialog">
               <DialogHeader>
                 <DialogTitle>Assign Quote to Agent</DialogTitle>
               </DialogHeader>
@@ -346,6 +308,7 @@ const Quotes = () => {
                     className="form-input"
                     placeholder="Enter agent name"
                     list="agents-list"
+                    data-testid="assign-agent-input"
                   />
                   <datalist id="agents-list">
                     {agents.map((agent) => (
@@ -355,10 +318,10 @@ const Quotes = () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)} data-testid="assign-cancel-btn">
                   Cancel
                 </Button>
-                <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAssignQuote}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAssignQuote} data-testid="assign-confirm-btn">
                   Assign
                 </Button>
               </DialogFooter>

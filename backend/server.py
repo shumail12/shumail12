@@ -577,6 +577,51 @@ async def get_quotes_count(
     count = await db.quotes.count_documents(query)
     return {"total": count}
 
+@api_router.get("/quotes/enriched")
+async def get_quotes_enriched(
+    skip: int = 0,
+    limit: int = 100,
+    status: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get quotes with customer info - paginate first, then enrich with lead data"""
+    query = {}
+    if status:
+        query["status"] = status
+    if assigned_to:
+        query["assigned_to"] = assigned_to
+    if search:
+        query["$or"] = [
+            {"quote_number": {"$regex": search, "$options": "i"}},
+            {"pickup_city": {"$regex": search, "$options": "i"}},
+            {"delivery_city": {"$regex": search, "$options": "i"}},
+            {"assigned_to": {"$regex": search, "$options": "i"}},
+        ]
+
+    total = await db.quotes.count_documents(query)
+    quotes = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
+    # Batch-fetch lead info for this page only
+    lead_ids = list({q["lead_id"] for q in quotes if q.get("lead_id")})
+    leads_map = {}
+    if lead_ids:
+        leads_cursor = db.leads.find({"id": {"$in": lead_ids}}, {"_id": 0, "id": 1, "customer_name": 1, "phone": 1, "email": 1})
+        async for lead in leads_cursor:
+            leads_map[lead["id"]] = lead
+
+    enriched = []
+    for q in quotes:
+        lead = leads_map.get(q.get("lead_id"), {})
+        q["customer_name"] = lead.get("customer_name", "")
+        q["customer_phone"] = lead.get("phone", "")
+        q["customer_email"] = lead.get("email", "")
+        enriched.append(q)
+
+    return {"quotes": enriched, "total": total}
+
+
 @api_router.get("/quotes/agents/list")
 async def get_quotes_agents(current_user: User = Depends(get_current_user)):
     """Get unique list of assigned agents"""

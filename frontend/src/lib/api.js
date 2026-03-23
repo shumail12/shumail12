@@ -41,6 +41,7 @@ export const deleteLead = (id) => api.delete(`/leads/${id}`);
 
 // Quotes
 export const getQuotes = (params = {}) => api.get('/quotes', { params });
+export const getQuotesEnriched = (params = {}) => api.get('/quotes/enriched', { params });
 export const getQuotesCount = (params = {}) => api.get('/quotes/count/total', { params });
 export const getQuotesAgents = () => api.get('/quotes/agents/list');
 export const getQuote = (id) => api.get(`/quotes/${id}`);
