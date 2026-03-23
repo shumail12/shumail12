@@ -1,10 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request, Header as FastAPIHeader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
+import json
+import secrets
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -39,6 +43,38 @@ security = HTTPBearer()
 
 app = FastAPI(title="Breamway Auto Transport API", version="2.0.0")
 api_router = APIRouter(prefix="/api")
+
+# ==================== SSE CLIENT MANAGER ====================
+
+class SSEManager:
+    """Manages SSE connections for real-time notifications"""
+    def __init__(self):
+        self.clients: dict[str, asyncio.Queue] = {}
+
+    def connect(self, client_id: str) -> asyncio.Queue:
+        queue = asyncio.Queue()
+        self.clients[client_id] = queue
+        return queue
+
+    def disconnect(self, client_id: str):
+        self.clients.pop(client_id, None)
+
+    async def broadcast(self, event_type: str, data: dict):
+        """Send event to all connected clients"""
+        message = json.dumps({"type": event_type, **data}, default=str)
+        disconnected = []
+        for client_id, queue in self.clients.items():
+            try:
+                await queue.put(message)
+            except Exception:
+                disconnected.append(client_id)
+        for cid in disconnected:
+            self.disconnect(cid)
+
+sse_manager = SSEManager()
+
+# Default vendor API key (generated on startup)
+VENDOR_API_KEY = os.getenv("VENDOR_API_KEY", "brw-" + secrets.token_hex(16))
 
 
 # ==================== STARTUP ====================
@@ -75,6 +111,17 @@ async def ensure_superadmin():
     await db.orders.create_index("order_number", unique=True, sparse=True)
     await db.counters.update_one({"_id": "quote_seq"}, {"$setOnInsert": {"seq": 0}}, upsert=True)
     await db.counters.update_one({"_id": "order_seq"}, {"$setOnInsert": {"seq": 0}}, upsert=True)
+    # Notifications index
+    await db.notifications.create_index([("created_at", -1)])
+    await db.notifications.create_index("is_read")
+    # Store/log vendor API key
+    await db.settings.update_one(
+        {"_id": "vendor_api_key"},
+        {"$setOnInsert": {"key": VENDOR_API_KEY, "created_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    logging.info(f"Vendor API Key: {key_doc['key']}")
 
 
 async def get_next_quote_number():
@@ -237,6 +284,26 @@ class CompanySettings(BaseModel):
     website: str = "www.breamway.com"
     primary_color: str = "#2563EB"
     invoice_terms: str = "Payment due within 30 days"
+
+# --- Vendor Lead Intake ---
+
+class VendorLeadInput(BaseModel):
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    vehicle: Optional[dict] = None  # {year, make, model}
+    vehicle_year: Optional[str] = ""
+    vehicle_make: Optional[str] = ""
+    vehicle_model: Optional[str] = ""
+    pickup: Optional[str] = ""
+    delivery: Optional[str] = ""
+    pickup_city: Optional[str] = ""
+    pickup_state: Optional[str] = ""
+    delivery_city: Optional[str] = ""
+    delivery_state: Optional[str] = ""
+    date: Optional[str] = None
+    source: Optional[str] = "vendor"
+    notes: Optional[str] = ""
 
 
 # ==================== AUTHENTICATION ====================
@@ -700,6 +767,209 @@ async def delete_invoice(invoice_id: str, current_user: User = Depends(get_curre
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice deleted"}
+
+
+# ==================== LEAD INTAKE (VENDOR API) ====================
+
+def parse_location(location_str):
+    """Parse 'City, ST' into city and state"""
+    if not location_str:
+        return '', ''
+    parts = [p.strip() for p in location_str.split(',')]
+    if len(parts) >= 2:
+        return parts[0], parts[-1]
+    return location_str, ''
+
+async def verify_vendor_key(x_api_key: str = FastAPIHeader(alias="X-API-Key", default="")):
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    if not key_doc or x_api_key != key_doc["key"]:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return True
+
+@api_router.post("/leads/incoming")
+async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_vendor_key)):
+    """Public endpoint for vendors to post leads"""
+    # Parse vehicle from nested object or flat fields
+    v_year = data.vehicle_year or (data.vehicle.get("year", "") if data.vehicle else "")
+    v_make = data.vehicle_make or (data.vehicle.get("make", "") if data.vehicle else "")
+    v_model = data.vehicle_model or (data.vehicle.get("model", "") if data.vehicle else "")
+
+    # Parse locations
+    p_city = data.pickup_city or ""
+    p_state = data.pickup_state or ""
+    d_city = data.delivery_city or ""
+    d_state = data.delivery_state or ""
+    if data.pickup and not p_city:
+        p_city, p_state = parse_location(data.pickup)
+    if data.delivery and not d_city:
+        d_city, d_state = parse_location(data.delivery)
+
+    quote_number = await get_next_quote_number()
+    quote_doc = {
+        "id": str(uuid.uuid4()),
+        "quote_number": quote_number,
+        "agent_name": "",
+        "customer_name": data.name,
+        "phone": data.phone or "",
+        "email": data.email or "",
+        "vehicle_year": str(v_year),
+        "vehicle_make": str(v_make),
+        "vehicle_model": str(v_model),
+        "pickup_address": data.pickup or f"{p_city}, {p_state}".strip(", "),
+        "pickup_city": p_city,
+        "pickup_state": p_state,
+        "delivery_address": data.delivery or f"{d_city}, {d_state}".strip(", "),
+        "delivery_city": d_city,
+        "delivery_state": d_state,
+        "pickup_date": data.date,
+        "shipping_type": "standard",
+        "price": 0,
+        "deposit_fee": 150,
+        "carrier_fee": 0,
+        "source": data.source or "vendor",
+        "status": "lead",
+        "notes": data.notes or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.quotes.insert_one(quote_doc)
+    quote_doc.pop("_id", None)
+
+    # Create notification
+    vehicle_str = " ".join(filter(None, [str(v_year), str(v_make), str(v_model)]))
+    route_str = f"{p_city or '?'} → {d_city or '?'}"
+    notif_doc = {
+        "id": str(uuid.uuid4()),
+        "type": "new_lead",
+        "title": "New Lead Received",
+        "message": f"{data.name} - {vehicle_str} - {route_str}",
+        "quote_id": quote_doc["id"],
+        "quote_number": quote_number,
+        "customer_name": data.name,
+        "route": route_str,
+        "vehicle": vehicle_str,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one(notif_doc)
+    notif_doc.pop("_id", None)
+
+    # Broadcast to all connected SSE clients
+    await sse_manager.broadcast("new_lead", {
+        "notification": notif_doc,
+        "quote": quote_doc,
+    })
+
+    return {"status": "success", "message": "Lead received", "quote_number": quote_number, "quote_id": quote_doc["id"]}
+
+
+@api_router.get("/leads/specs")
+async def get_lead_posting_specs(current_user: User = Depends(get_current_user)):
+    """Return lead posting specifications for vendors"""
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    api_key = key_doc["key"] if key_doc else "NOT_CONFIGURED"
+    base_url = os.environ.get("REACT_APP_BACKEND_URL", "https://your-domain.com")
+
+    return {
+        "endpoint": f"{base_url}/api/leads/incoming",
+        "method": "POST",
+        "content_type": "application/json",
+        "authentication": {
+            "type": "API Key",
+            "header": "X-API-Key",
+            "key": api_key,
+        },
+        "required_fields": ["name"],
+        "optional_fields": ["phone", "email", "vehicle", "pickup", "delivery", "date", "source", "notes"],
+        "sample_request": {
+            "name": "John Doe",
+            "phone": "1234567890",
+            "email": "john@example.com",
+            "vehicle": {"year": "2020", "make": "Toyota", "model": "Camry"},
+            "pickup": "Los Angeles, CA",
+            "delivery": "Houston, TX",
+            "date": "2026-01-01",
+        },
+        "sample_response_success": {"status": "success", "message": "Lead received", "quote_number": "BR039999", "quote_id": "uuid-here"},
+        "sample_response_error": {"status": "error", "message": "Invalid data"},
+    }
+
+
+@api_router.get("/leads/api-key")
+async def get_vendor_api_key(current_user: User = Depends(require_superadmin)):
+    """Get the vendor API key (superadmin only)"""
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    return {"api_key": key_doc["key"] if key_doc else "NOT_CONFIGURED"}
+
+@api_router.post("/leads/api-key/regenerate")
+async def regenerate_vendor_api_key(current_user: User = Depends(require_superadmin)):
+    """Regenerate vendor API key"""
+    new_key = "brw-" + secrets.token_hex(16)
+    await db.settings.update_one({"_id": "vendor_api_key"}, {"$set": {"key": new_key}})
+    return {"api_key": new_key}
+
+
+# ==================== NOTIFICATIONS & SSE ====================
+
+@api_router.get("/notifications")
+async def get_notifications(
+    limit: int = 50, unread_only: bool = False,
+    current_user: User = Depends(get_current_user)
+):
+    query = {}
+    if unread_only:
+        query["is_read"] = False
+    notifs = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    unread_count = await db.notifications.count_documents({"is_read": False})
+    return {"notifications": notifs, "unread_count": unread_count}
+
+@api_router.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, current_user: User = Depends(get_current_user)):
+    await db.notifications.update_one({"id": notif_id}, {"$set": {"is_read": True}})
+    return {"message": "Marked as read"}
+
+@api_router.post("/notifications/read-all")
+async def mark_all_read(current_user: User = Depends(get_current_user)):
+    await db.notifications.update_many({"is_read": False}, {"$set": {"is_read": True}})
+    return {"message": "All marked as read"}
+
+@api_router.get("/notifications/stream")
+async def notification_stream(request: Request, token: str = ""):
+    """SSE endpoint for real-time notifications"""
+    # Validate JWT token
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    client_id = f"{username}-{uuid.uuid4().hex[:8]}"
+
+    async def event_generator():
+        queue = sse_manager.connect(client_id)
+        try:
+            # Send initial connected event
+            yield f"data: {json.dumps({'type': 'connected', 'client_id': client_id})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {message}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield f": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            sse_manager.disconnect(client_id)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",  # Disable nginx buffering
+    })
 
 
 # ==================== SETUP ====================
