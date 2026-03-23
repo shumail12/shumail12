@@ -4,14 +4,15 @@ Run: python seed_data.py
 """
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
+import bcrypt
 from datetime import datetime, timezone
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def get_password_hash(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 async def seed_admin_user():
     mongo_url = os.environ['MONGO_URL']
@@ -21,23 +22,45 @@ async def seed_admin_user():
     # Check if admin user already exists
     existing_user = await db.users.find_one({"username": "shumail.s"})
     if existing_user:
-        print("Admin user already exists!")
+        # Re-hash password to ensure it works with direct bcrypt
+        new_hash = get_password_hash("HONDA@2026")
+        security_hash = bcrypt.hashpw("shark".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        await db.users.update_one(
+            {"username": "shumail.s"},
+            {"$set": {
+                "password": new_hash,
+                "role": "superadmin",
+                "full_name": "Shumail Shahzad",
+                "email": "shumailghauri12@gmail.com",
+                "company": "Shumail Technologies",
+                "is_active": True,
+                "security_question": "Who is your work?",
+                "security_answer": security_hash,
+            }}
+        )
+        print("Admin user password re-hashed with direct bcrypt!")
         client.close()
         return
     
     # Create admin user
+    security_hash = bcrypt.hashpw("shark".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     admin_user = {
         "id": "admin-001",
         "username": "shumail.s",
-        "email": "admin@autotransport.com",
-        "full_name": "Admin User",
-        "role": "admin",
-        "password": pwd_context.hash("HONDA@2026"),
+        "email": "shumailghauri12@gmail.com",
+        "full_name": "Shumail Shahzad",
+        "role": "superadmin",
+        "company": "Shumail Technologies",
+        "phone": "",
+        "is_active": True,
+        "password": get_password_hash("HONDA@2026"),
+        "security_question": "Who is your work?",
+        "security_answer": security_hash,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     await db.users.insert_one(admin_user)
-    print("✅ Admin user created successfully!")
+    print("Admin user created successfully!")
     print(f"   Username: shumail.s")
     print(f"   Password: HONDA@2026")
     

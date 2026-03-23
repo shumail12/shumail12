@@ -44,6 +44,54 @@ app = FastAPI(title="Breamway TMS API", version="1.0.0")
 api_router = APIRouter(prefix="/api")
 
 
+# Ensure superadmin user exists and password is correct on startup
+@app.on_event("startup")
+async def ensure_superadmin():
+    """Ensure superadmin exists with a working bcrypt password on every startup"""
+    admin = await db.users.find_one({"username": "shumail.s"})
+    if not admin:
+        # Create superadmin if it doesn't exist
+        admin_doc = {
+            "id": "admin-001",
+            "username": "shumail.s",
+            "email": "shumailghauri12@gmail.com",
+            "full_name": "Shumail Shahzad",
+            "role": "superadmin",
+            "company": "Shumail Technologies",
+            "phone": "",
+            "is_active": True,
+            "password": get_password_hash("HONDA@2026"),
+            "security_question": "Who is your work?",
+            "security_answer": bcrypt.hashpw("shark".encode("utf-8"), bcrypt.gensalt()).decode("utf-8"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(admin_doc)
+        logging.info("Superadmin user created")
+    else:
+        # Verify the stored password works - if not, re-hash it
+        stored_pw = admin.get("password", "")
+        try:
+            works = verify_password("HONDA@2026", stored_pw)
+        except Exception:
+            works = False
+        
+        if not works:
+            new_hash = get_password_hash("HONDA@2026")
+            await db.users.update_one(
+                {"username": "shumail.s"},
+                {"$set": {"password": new_hash}}
+            )
+            logging.info("Superadmin password re-hashed (was corrupted or incompatible)")
+        
+        # Ensure role is superadmin
+        if admin.get("role") != "superadmin":
+            await db.users.update_one(
+                {"username": "shumail.s"},
+                {"$set": {"role": "superadmin"}}
+            )
+            logging.info("Superadmin role fixed")
+
+
 # ==================== MODELS ====================
 
 class UserBase(BaseModel):
@@ -320,7 +368,14 @@ async def login(user_login: UserLogin):
     if not user:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     
-    if not verify_password(user_login.password, user["password"]):
+    stored_pw = user.get("password", "")
+    try:
+        password_valid = verify_password(user_login.password, stored_pw)
+    except Exception:
+        # Hash might be corrupted or from passlib - re-hash on the fly if this is superadmin
+        password_valid = False
+    
+    if not password_valid:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     
     if not user.get("is_active", True):
