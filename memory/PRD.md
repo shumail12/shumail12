@@ -17,23 +17,28 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 ### Phase 1 - Core CRM (DONE)
 - JWT Auth with self-healing bcrypt
 - Dashboard with stats
-- Leads → Quotes → Orders workflow
-- Carriers management
-- Invoice system (customer & driver)
-- User management (superadmin only)
-- Company settings
+- Leads -> Quotes -> Orders workflow
+- Carriers management, Invoice system, User management
 - Auto-import of ~39.8k legacy records from CSV
 
 ### Phase 2 - Real-time & Vendor Integration (DONE)
-- SSE-based real-time notification system
-- Notification bell with popups
+- SSE-based real-time notifications
 - Vendor Lead Intake API (POST /api/leads/incoming with X-API-Key)
-- Public API documentation endpoint (/api/leads/specs)
 
 ### Phase 3 - Chat, Admin Panel, Agreements (DONE - March 25, 2026)
-- **Internal Chat System**: 1-on-1 DM + All Team group chat with SSE real-time messaging
-- **Admin Control Panel**: API key management, lead distribution rules, lead sources analytics, API activity logs
-- **Agreement/Contract System**: Create from orders, digital signature pad (canvas), public signing page, status flow (draft→sent→signed/void), terms & conditions template
+- Internal Chat System: 1-on-1 DM + All Team + custom groups + file upload + user search
+- Admin Control Panel: API keys, lead distribution, lead sources, API logs
+- Agreement/Contract System: digital signature, public signing, status flow
+
+### Phase 4 - Pricing Engine & Route Intelligence (DONE - March 25, 2026)
+- **Editable Pricing for 3 Shipping Types**: Standard ($0.75/mi), Expedited ($0.95/mi), Enclosed ($1.00/mi)
+- **Auto-calculation**: Total = Deposit Fee + Carrier Fee + (Distance x Rate)
+- **Distance Estimation**: Built-in US city lookup with haversine formula (~500 cities)
+- **Lead Approval**: "Approve All Prices" saves all 3 types, converts lead to quote
+- **Pricing Editable Everywhere**: Leads, Quotes, and Orders all have PricingEditor
+- **Zip Code Fields**: Pickup and delivery zip codes across all detail pages
+- **USA Route Map**: SVG map with all 50 states, animated dashed route line between pickup/delivery
+- **Route Intelligence**: City-specific facts + state weather/transport/road facts for both route endpoints
 
 ## Prioritized Backlog
 
@@ -48,24 +53,10 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - Invoice payment update bug fix
 
 ### P3 - Deferred
-- Central Dispatch API Integration (deferred by user)
+- Central Dispatch API Integration
 
-## Key API Endpoints
-- `POST /api/auth/login` - Login
-- `GET /api/leads` - List leads
-- `POST /api/leads/incoming` - Vendor lead intake (X-API-Key auth)
-- `GET /api/quotes` - List quotes
-- `POST /api/quotes/{id}/convert-to-order` - Convert quote to order
-- `GET /api/orders` - List orders
-- `POST /api/chat/send` - Send chat message
-- `GET /api/chat/channels` - Get chat channels
-- `GET /api/agreements` - List agreements
-- `POST /api/agreements` - Create agreement
-- `POST /api/agreements/{id}/sign` - Sign agreement
-- `GET /api/agreements/public/{id}` - Public agreement view
-- `POST /api/agreements/public/{id}/sign` - Public signing
-- `GET /api/admin/distribution` - Lead distribution rules
-- `GET /api/notifications/stream` - SSE stream
-
-## DB Collections
-- users, quotes, orders, carriers, invoices, notifications, chat_messages, agreements, distribution_rules, api_logs, settings, company_settings, counters
+## Key Components
+- `/app/frontend/src/components/PricingEditor.js` - Shared 3-type pricing card
+- `/app/frontend/src/components/USARouteMap.js` - SVG route visualization
+- `/app/frontend/src/components/TransportFacts.js` - Route intelligence facts
+- `/app/backend/distance_calc.py` - Haversine distance + pricing calculation
