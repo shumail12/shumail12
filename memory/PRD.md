@@ -15,44 +15,36 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 ## What's Been Implemented
 
 ### Phase 1 - Core CRM (DONE)
-- JWT Auth with self-healing bcrypt
-- Dashboard with stats
-- Leads -> Quotes -> Orders workflow
-- Carriers management, Invoice system, User management
-- Auto-import of ~39.8k legacy records from CSV
+- JWT Auth, Dashboard, Leads -> Quotes -> Orders workflow, Carriers, Invoices, User management
+- Auto-import ~39.8k legacy records from CSV
 
 ### Phase 2 - Real-time & Vendor Integration (DONE)
-- SSE-based real-time notifications
-- Vendor Lead Intake API (POST /api/leads/incoming with X-API-Key)
+- SSE-based real-time notifications, Vendor Lead Intake API
 
 ### Phase 3 - Chat, Admin Panel, Agreements (DONE)
-- Internal Chat System: 1-on-1 DM + All Team + custom groups + file upload + user search
-- Admin Control Panel: API keys, lead distribution, lead sources, API logs
-- Agreement/Contract System: digital signature, public signing, status flow
+- Internal Chat (1-on-1, Team, Groups, File Upload), Admin Control Panel, Agreement/Contract System with digital signature
 
 ### Phase 4 - Pricing Engine & Route Intelligence (DONE)
-- Editable Pricing for 3 Shipping Types: Standard, Expedited, Enclosed
-- Auto-calculation: Total = Deposit Fee + Carrier Fee + (Distance x Rate)
-- Distance Estimation: Built-in US city lookup with haversine formula
-- Lead Approval, Zip Codes, USA Route Map, Route Intelligence
+- Editable 3-tier Pricing (Standard/Expedited/Enclosed), Auto-calculation, Distance Estimation, USA Route Map, Route Intelligence
 
 ### Phase 5 - Revenue Tracking & User-Specific Leads (DONE)
-- User-specific leads: New leads are private to assigned user
-- Revenue Form, Revenue Dashboard (superadmin), Dashboard Revenue Targets
-- Payment methods: Zelle, COD, CashApp, Venmo, ACH, Card
+- User-specific leads, Revenue Form, Revenue Dashboard, Dashboard Revenue Targets, Payment Methods
 
-### Phase 6 - Advanced Invoice/Agreement System & UX Enhancements (DONE - March 25, 2026)
-- Customer & Carrier Invoice/Agreement: Professional Breamway-branded editable documents
-- Invoice Generation: One-click from Order Detail page
-- Auto Logout (30-min Session Timeout), Login Motivational Popup
+### Phase 6 - Advanced Invoice/Agreement System & UX (DONE)
+- Customer & Carrier Invoices (Breamway-branded, print-ready), Auto Logout (30-min), Motivational Popup
 
-### Phase 7 - Superadmin Full Edit Control & Speed (DONE - March 25, 2026)
-- **Superadmin Invoice/Agreement Editor (Canva-style)**: Header company name, subtitle, DOT numbers, document title — all editable before signing
-- **Superadmin Order Editor**: Customer name, phone, email, vehicle year/make/model, pickup/delivery city/state/zip, agent, source — all editable
-- **Signed Invoice Protection**: Admin cannot edit signed invoices (403), superadmin can
-- **Terms & Conditions**: Fully editable by superadmin before signing
-- **Chat SSE Reconnection**: Auto-reconnect on error with 3-second retry (was dying on disconnect)
-- Backend: OrderUpdateInput expanded with 12 new fields, InvoiceUpdateInput expanded with 4 branding fields
+### Phase 7 - Superadmin Full Edit Control & Speed (DONE)
+- Superadmin Invoice Editor (Canva-style: header, DOT#, title, terms editable), Superadmin Order Editor (customer/vehicle/location), Signed Invoice Protection, Chat SSE Reconnection
+
+### Phase 8 - Revenue Enhancement System (DONE - March 25, 2026)
+- **Superadmin Edit Revenue**: Edit deposit, payment method, customer name, notes on any revenue entry
+- **Superadmin Delete Revenue**: Remove incorrect entries with confirmation dialog
+- **Monthly Revenue Reset**: Dashboard progress bar shows CURRENT MONTH only. Old data fully preserved.
+- **Monthly Revenue History**: Month-by-month breakdown cards showing total, count, per-user performance
+- **Month Filter**: Revenue admin summary filterable by month (YYYY-MM)
+- **User Filter on History**: Filter monthly history by specific user
+- **Dashboard Month Label**: Revenue target shows current month name (e.g., "March 2026")
+- **Instant Updates**: Edit/delete immediately refreshes all dashboard totals and reports
 
 ## Prioritized Backlog
 
@@ -69,12 +61,13 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - Route cost comparison dashboard
 
 ### Refactoring
-- Break `server.py` (~2000+ lines) into modular routers/models
+- Break `server.py` (~2100+ lines) into modular routers/models
 
 ## Key API Endpoints
+- `PUT /api/revenue/{id}` (superadmin edit revenue)
+- `DELETE /api/revenue/{id}` (superadmin delete revenue)
+- `GET /api/revenue/monthly-history` (month-by-month breakdown)
+- `GET /api/revenue/admin/summary?month=YYYY-MM` (filtered admin summary)
+- `GET /api/dashboard/stats` (current month revenue for target)
 - `POST /api/orders/{order_id}/generate-invoice?invoice_type=customer|carrier`
 - `PUT /api/invoices/{invoice_id}` (admin/superadmin, branding+all fields)
-- `PUT /api/orders/{order_id}` (superadmin: customer/vehicle/location fields)
-- `POST /api/invoices/{invoice_id}/sign`
-- `POST /api/orders/{order_id}/revenue`
-- `GET /api/revenue/admin/summary`
