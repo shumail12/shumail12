@@ -441,6 +441,40 @@ class ChatMessageInput(BaseModel):
     channel: str = "all-team"  # 'all-team' or 'dm-{user1}-{user2}'
     text: str
 
+# --- Agreement/Contract ---
+
+class AgreementCreateInput(BaseModel):
+    order_id: str
+    agreement_type: str = "transport"  # transport, broker, carrier
+    customer_name: str = ""
+    customer_email: str = ""
+    customer_phone: str = ""
+    vehicle_info: str = ""
+    pickup_location: str = ""
+    delivery_location: str = ""
+    price: float = 0
+    deposit: float = 0
+    terms: str = ""
+    special_conditions: str = ""
+
+class AgreementUpdateInput(BaseModel):
+    agreement_type: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
+    vehicle_info: Optional[str] = None
+    pickup_location: Optional[str] = None
+    delivery_location: Optional[str] = None
+    price: Optional[float] = None
+    deposit: Optional[float] = None
+    terms: Optional[str] = None
+    special_conditions: Optional[str] = None
+    status: Optional[str] = None
+
+class SignAgreementInput(BaseModel):
+    signer_name: str
+    signature_data: str  # base64 encoded signature image
+
 
 # ==================== AUTHENTICATION ====================
 
@@ -974,6 +1008,184 @@ async def delete_invoice(invoice_id: str, current_user: User = Depends(get_curre
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice deleted"}
+
+
+# ==================== AGREEMENT/CONTRACT ROUTES ====================
+
+DEFAULT_TRANSPORT_TERMS = """VEHICLE TRANSPORT AGREEMENT
+
+This Agreement is entered into between Breamway Auto Transport ("Broker") and the Customer identified below.
+
+1. SERVICES: Broker agrees to arrange transportation of the vehicle(s) described herein from the pickup location to the delivery location.
+
+2. PRICING: The total price includes all transport costs. A deposit is required to secure the booking. The remaining balance is due upon delivery.
+
+3. INSURANCE: All carriers arranged by Broker maintain cargo insurance as required by Federal Motor Carrier Safety Administration (FMCSA) regulations.
+
+4. PICKUP & DELIVERY: Dates provided are estimates. Broker will make reasonable efforts to meet the estimated schedule. Delays due to weather, mechanical issues, or other factors beyond control do not constitute breach.
+
+5. VEHICLE CONDITION: Customer agrees to remove all personal belongings from the vehicle. Broker is not responsible for items left in the vehicle. A condition report will be completed at pickup and delivery.
+
+6. CANCELLATION: Customer may cancel this agreement with written notice. Cancellation fees may apply if a carrier has already been dispatched.
+
+7. LIABILITY: Broker acts solely as an intermediary. Carrier assumes full liability during transport per FMCSA regulations.
+
+8. PAYMENT: Payment is due as specified. Failure to pay may result in carrier holding the vehicle until payment is received.
+
+By signing below, Customer acknowledges reading and agreeing to all terms and conditions."""
+
+@api_router.post("/agreements")
+async def create_agreement(data: AgreementCreateInput, current_user: User = Depends(get_current_user)):
+    order = await db.orders.find_one({"id": data.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    quote = await db.quotes.find_one({"id": order.get("quote_id", "")}, {"_id": 0})
+    doc = data.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["agreement_number"] = f"AGR-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
+    doc["order_number"] = order.get("order_number", "")
+    # Auto-fill from order/quote if not provided
+    if not doc["customer_name"]:
+        doc["customer_name"] = order.get("customer_name", "")
+    if not doc["customer_email"]:
+        doc["customer_email"] = order.get("email", "")
+    if not doc["customer_phone"]:
+        doc["customer_phone"] = order.get("phone", "")
+    if not doc["vehicle_info"]:
+        doc["vehicle_info"] = " ".join(filter(None, [order.get("vehicle_year", ""), order.get("vehicle_make", ""), order.get("vehicle_model", "")]))
+    if not doc["pickup_location"]:
+        doc["pickup_location"] = order.get("pickup_address", "")
+    if not doc["delivery_location"]:
+        doc["delivery_location"] = order.get("delivery_address", "")
+    if not doc["price"]:
+        doc["price"] = order.get("price", 0)
+    if not doc["deposit"]:
+        doc["deposit"] = order.get("deposit_fee", 150)
+    if not doc["terms"]:
+        doc["terms"] = DEFAULT_TRANSPORT_TERMS
+    doc["status"] = "draft"  # draft, sent, signed, void
+    doc["signature_data"] = None
+    doc["signer_name"] = None
+    doc["signed_at"] = None
+    doc["created_by"] = current_user.full_name
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.agreements.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.get("/agreements")
+async def get_agreements(
+    skip: int = 0, limit: int = 100,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    query = {}
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"agreement_number": {"$regex": search, "$options": "i"}},
+            {"customer_name": {"$regex": search, "$options": "i"}},
+            {"order_number": {"$regex": search, "$options": "i"}},
+        ]
+    total = await db.agreements.count_documents(query)
+    agreements = await db.agreements.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"agreements": agreements, "total": total}
+
+@api_router.get("/agreements/{agreement_id}")
+async def get_agreement(agreement_id: str, current_user: User = Depends(get_current_user)):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    return agreement
+
+@api_router.put("/agreements/{agreement_id}")
+async def update_agreement(agreement_id: str, data: AgreementUpdateInput, current_user: User = Depends(get_current_user)):
+    existing = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    if existing.get("status") == "signed":
+        raise HTTPException(status_code=400, detail="Cannot edit a signed agreement")
+    update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.agreements.update_one({"id": agreement_id}, {"$set": update_dict})
+    updated = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/agreements/{agreement_id}/send")
+async def send_agreement(agreement_id: str, current_user: User = Depends(get_current_user)):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    await db.agreements.update_one({"id": agreement_id}, {"$set": {"status": "sent", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/agreements/{agreement_id}/sign")
+async def sign_agreement(agreement_id: str, sign_data: SignAgreementInput, current_user: User = Depends(get_current_user)):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    if agreement.get("status") == "signed":
+        raise HTTPException(status_code=400, detail="Agreement already signed")
+    await db.agreements.update_one({"id": agreement_id}, {"$set": {
+        "status": "signed",
+        "signature_data": sign_data.signature_data,
+        "signer_name": sign_data.signer_name,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }})
+    updated = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/agreements/{agreement_id}/void")
+async def void_agreement(agreement_id: str, current_user: User = Depends(get_current_user)):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    await db.agreements.update_one({"id": agreement_id}, {"$set": {"status": "void", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    updated = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/agreements/{agreement_id}")
+async def delete_agreement(agreement_id: str, current_user: User = Depends(get_current_user)):
+    existing = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    if existing.get("status") == "signed":
+        raise HTTPException(status_code=400, detail="Cannot delete a signed agreement")
+    result = await db.agreements.delete_one({"id": agreement_id})
+    return {"message": "Agreement deleted"}
+
+# Public signing endpoint - allows customer to view and sign without full auth
+@api_router.get("/agreements/public/{agreement_id}")
+async def get_public_agreement(agreement_id: str):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0, "signature_data": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    if agreement.get("status") == "void":
+        raise HTTPException(status_code=400, detail="Agreement has been voided")
+    return agreement
+
+@api_router.post("/agreements/public/{agreement_id}/sign")
+async def public_sign_agreement(agreement_id: str, sign_data: SignAgreementInput):
+    agreement = await db.agreements.find_one({"id": agreement_id}, {"_id": 0})
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement not found")
+    if agreement.get("status") == "signed":
+        raise HTTPException(status_code=400, detail="Agreement already signed")
+    if agreement.get("status") == "void":
+        raise HTTPException(status_code=400, detail="Agreement has been voided")
+    await db.agreements.update_one({"id": agreement_id}, {"$set": {
+        "status": "signed",
+        "signature_data": sign_data.signature_data,
+        "signer_name": sign_data.signer_name,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }})
+    return {"message": "Agreement signed successfully"}
 
 
 # ==================== LEAD INTAKE (VENDOR API) ====================

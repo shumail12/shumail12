@@ -20,6 +20,7 @@ import {
   Users,
   MessageSquare,
   ShieldCheck,
+  FileSignature,
 } from 'lucide-react';
 
 const getNavigation = (isSuperAdmin) => {
@@ -29,6 +30,7 @@ const getNavigation = (isSuperAdmin) => {
     { name: 'Quotes', href: '/quotes', icon: FileText },
     { name: 'Orders', href: '/orders', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
+    { name: 'Agreements', href: '/agreements', icon: FileSignature },
     { name: 'Chat', href: '/chat', icon: MessageSquare },
   ];
   if (isSuperAdmin) {

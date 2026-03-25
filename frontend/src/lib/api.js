@@ -89,4 +89,14 @@ export const upsertDistributionRule = (agent_name, source, weight = 1, enabled =
 export const deleteDistributionRule = (agent_name, source) =>
   api.delete('/admin/distribution', { params: { agent_name, source } });
 
+// Agreements
+export const getAgreements = (params = {}) => api.get('/agreements', { params });
+export const getAgreement = (id) => api.get(`/agreements/${id}`);
+export const createAgreement = (data) => api.post('/agreements', data);
+export const updateAgreement = (id, data) => api.put(`/agreements/${id}`, data);
+export const sendAgreement = (id) => api.post(`/agreements/${id}/send`);
+export const signAgreement = (id, data) => api.post(`/agreements/${id}/sign`, data);
+export const voidAgreement = (id) => api.post(`/agreements/${id}/void`);
+export const deleteAgreement = (id) => api.delete(`/agreements/${id}`);
+
 export default api;
