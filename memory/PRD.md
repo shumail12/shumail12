@@ -31,37 +31,28 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - Agreement/Contract System: digital signature, public signing, status flow
 
 ### Phase 4 - Pricing Engine & Route Intelligence (DONE)
-- Editable Pricing for 3 Shipping Types: Standard ($0.75/mi), Expedited ($0.95/mi), Enclosed ($1.00/mi)
+- Editable Pricing for 3 Shipping Types: Standard, Expedited, Enclosed
 - Auto-calculation: Total = Deposit Fee + Carrier Fee + (Distance x Rate)
-- Distance Estimation: Built-in US city lookup with haversine formula (~500 cities)
-- Lead Approval: "Approve All Prices" saves all 3 types, converts lead to quote
-- Pricing Editable Everywhere: Leads, Quotes, and Orders all have PricingEditor
-- Zip Code Fields: Pickup and delivery zip codes across all detail pages
-- USA Route Map: SVG map with all 50 states, animated dashed route line
-- Route Intelligence: City-specific facts + state weather/transport/road facts
+- Distance Estimation: Built-in US city lookup with haversine formula
+- Lead Approval, Zip Codes, USA Route Map, Route Intelligence
 
-### Phase 5 - Revenue Tracking & User-Specific Leads (DONE - March 25, 2026)
-- User-specific leads: New leads are private to assigned user, legacy 39.8k quotes visible to all
-- Revenue Form: Fill from Order Detail page (deposit, total, payment method)
-- Revenue Dashboard (superadmin): Total deposits, per-agent breakdown, per-payment-method breakdown
-- Dashboard Revenue Target: Progress bar with 3 levels ($1,500 -> $3,000 -> $5,000)
+### Phase 5 - Revenue Tracking & User-Specific Leads (DONE)
+- User-specific leads: New leads are private to assigned user
+- Revenue Form, Revenue Dashboard (superadmin), Dashboard Revenue Targets
 - Payment methods: Zelle, COD, CashApp, Venmo, ACH, Card
-- Quotes table cleanup: Removed Vehicle, Pickup, Delivery, Status columns
 
 ### Phase 6 - Advanced Invoice/Agreement System & UX Enhancements (DONE - March 25, 2026)
-- **Customer Invoice/Agreement**: Professional Breamway-branded editable document generated from orders
-  - Customer info, vehicle details, route info (pickup/delivery with contacts), pricing & payment, full terms & conditions, digital signature pad
-  - USDOT# 4246498, MC# 1622825 branding
-- **Carrier Invoice/Agreement**: Separate professional carrier dispatch document
-  - Carrier info, driver details, customer reference, vehicle info, route info, carrier pay & COD, carrier terms, signature
-- **Invoice Generation**: One-click from Order Detail page (Customer Invoice / Carrier Invoice buttons)
-- **Editable by admin/superadmin only**: Role-based access control on invoice editing
-- **Invoice signing**: Digital signature with signer name and timestamp
-- **Print-ready layout**: CSS print styles for professional printout
-- **Invoices list enhanced**: Type column (Customer/Carrier badges), Customer/Carrier name column
-- **Auto Logout (Session Timeout)**: 30-minute inactivity timeout with "Session expired" message
-  - Tracks mouse, keyboard, scroll, touch, click events
-- **Login Motivational Popup**: 30 random sales/transport/motivation quotes, auto-dismisses after 30 seconds, manual close button
+- Customer & Carrier Invoice/Agreement: Professional Breamway-branded editable documents
+- Invoice Generation: One-click from Order Detail page
+- Auto Logout (30-min Session Timeout), Login Motivational Popup
+
+### Phase 7 - Superadmin Full Edit Control & Speed (DONE - March 25, 2026)
+- **Superadmin Invoice/Agreement Editor (Canva-style)**: Header company name, subtitle, DOT numbers, document title — all editable before signing
+- **Superadmin Order Editor**: Customer name, phone, email, vehicle year/make/model, pickup/delivery city/state/zip, agent, source — all editable
+- **Signed Invoice Protection**: Admin cannot edit signed invoices (403), superadmin can
+- **Terms & Conditions**: Fully editable by superadmin before signing
+- **Chat SSE Reconnection**: Auto-reconnect on error with 3-second retry (was dying on disconnect)
+- Backend: OrderUpdateInput expanded with 12 new fields, InvoiceUpdateInput expanded with 4 branding fields
 
 ## Prioritized Backlog
 
@@ -78,19 +69,12 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - Route cost comparison dashboard
 
 ### Refactoring
-- Break `server.py` (~1900+ lines) into modular routers/models
-
-## Key Components
-- `/app/frontend/src/components/PricingEditor.js` - Shared 3-type pricing card
-- `/app/frontend/src/components/USARouteMap.js` - SVG route visualization
-- `/app/frontend/src/components/TransportFacts.js` - Route intelligence facts
-- `/app/frontend/src/components/MotivationalPopup.js` - Login motivational quotes
-- `/app/backend/distance_calc.py` - Haversine distance + pricing calculation
+- Break `server.py` (~2000+ lines) into modular routers/models
 
 ## Key API Endpoints
-- `POST /api/orders/{order_id}/generate-invoice?invoice_type=customer|carrier` - Generate invoice from order
-- `POST /api/invoices/{invoice_id}/sign` - Sign an invoice
-- `PUT /api/invoices/{invoice_id}` - Edit invoice (admin/superadmin only)
-- `POST /api/orders/{order_id}/revenue` - Save revenue form
-- `GET /api/revenue/admin/summary` - Super admin revenue aggregation
-- `GET /api/dashboard/stats` - Dashboard stats with revenue targets
+- `POST /api/orders/{order_id}/generate-invoice?invoice_type=customer|carrier`
+- `PUT /api/invoices/{invoice_id}` (admin/superadmin, branding+all fields)
+- `PUT /api/orders/{order_id}` (superadmin: customer/vehicle/location fields)
+- `POST /api/invoices/{invoice_id}/sign`
+- `POST /api/orders/{order_id}/revenue`
+- `GET /api/revenue/admin/summary`
