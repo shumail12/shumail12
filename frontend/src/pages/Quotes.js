@@ -148,11 +148,7 @@ const Quotes = () => {
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Customer</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Phone</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Email</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Vehicle</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Pickup</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Delivery</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Price</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -164,20 +160,7 @@ const Quotes = () => {
                       <td className="px-3 py-2.5 font-medium text-slate-900 text-xs">{q.customer_name}</td>
                       <td className="px-3 py-2.5 text-slate-600 text-xs">{q.phone || '-'}</td>
                       <td className="px-3 py-2.5 text-slate-600 text-xs truncate max-w-[160px]">{q.email || '-'}</td>
-                      <td className="px-3 py-2.5 text-xs">
-                        <button onClick={() => window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${q.vehicle_year} ${q.vehicle_make} ${q.vehicle_model}`)}`, '_blank')}
-                          className="text-blue-600 hover:underline cursor-pointer" data-testid={`view-vehicle-${q.id}`}>
-                          {[q.vehicle_year, q.vehicle_make, q.vehicle_model].filter(Boolean).join(' ') || '-'}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-slate-700">{[q.pickup_city, q.pickup_state].filter(Boolean).join(', ') || '-'}</td>
-                      <td className="px-3 py-2.5 text-xs text-slate-700">{[q.delivery_city, q.delivery_state].filter(Boolean).join(', ') || '-'}</td>
                       <td className="px-3 py-2.5"><span className="font-mono font-bold text-emerald-600 text-xs">${q.price?.toLocaleString() || '0'}</span></td>
-                      <td className="px-3 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[q.status] || 'bg-slate-100 text-slate-600'}`}>
-                          {q.status}
-                        </span>
-                      </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center justify-end gap-0.5">
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600"

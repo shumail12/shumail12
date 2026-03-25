@@ -3,11 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getQuote, updateQuote, convertQuoteToOrder } from '../lib/api';
 import { PricingEditor } from '../components/PricingEditor';
+import USARouteMap from '../components/USARouteMap';
+import TransportFacts from '../components/TransportFacts';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Save, ArrowRightCircle, Car, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Save, ArrowRightCircle, Car, ExternalLink, Map } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusOptions = ['lead', 'quoted', 'order', 'dispatched', 'delivered', 'cancelled'];
@@ -187,6 +189,25 @@ const QuoteDetail = () => {
               onChange={handlePricingChange}
             />
           </div>
+
+          {/* USA Route Map */}
+          {!isNew && (form.pickup_state || form.delivery_state) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5" data-testid="quote-route-map">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center"><Map className="w-5 h-5 text-slate-600" /></div>
+                <h3 className="font-semibold text-slate-900">Transport Route</h3>
+              </div>
+              <USARouteMap pickupState={form.pickup_state} deliveryState={form.delivery_state} pickupCity={form.pickup_city} deliveryCity={form.delivery_city} />
+            </div>
+          )}
+
+          {/* Transport Facts */}
+          {!isNew && (form.pickup_state || form.delivery_state) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5" data-testid="quote-transport-facts">
+              <h3 className="font-semibold text-slate-900 mb-4">Route Intelligence</h3>
+              <TransportFacts pickupState={form.pickup_state} deliveryState={form.delivery_state} pickupCity={form.pickup_city} deliveryCity={form.delivery_city} />
+            </div>
+          )}
 
           {/* Notes */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">

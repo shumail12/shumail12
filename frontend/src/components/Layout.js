@@ -21,6 +21,7 @@ import {
   MessageSquare,
   ShieldCheck,
   FileSignature,
+  CircleDollarSign,
 } from 'lucide-react';
 
 const getNavigation = (isSuperAdmin) => {
@@ -35,6 +36,7 @@ const getNavigation = (isSuperAdmin) => {
   ];
   if (isSuperAdmin) {
     baseNav.push({ name: 'Users', href: '/users', icon: UserCog });
+    baseNav.push({ name: 'Revenue', href: '/revenue', icon: CircleDollarSign });
     baseNav.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck });
   }
   baseNav.push({ name: 'Settings', href: '/settings', icon: Settings });

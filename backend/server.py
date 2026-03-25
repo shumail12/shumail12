@@ -389,6 +389,7 @@ class OrderUpdateInput(BaseModel):
     estimated_distance: Optional[int] = None
     pickup_zip: Optional[str] = None
     delivery_zip: Optional[str] = None
+    payment_method: Optional[str] = None
 
 # --- Carrier ---
 
@@ -499,6 +500,20 @@ class AgreementUpdateInput(BaseModel):
 class SignAgreementInput(BaseModel):
     signer_name: str
     signature_data: str  # base64 encoded signature image
+
+# --- Revenue ---
+
+PAYMENT_METHODS = ["Zelle", "COD", "CashApp", "Venmo", "ACH", "Card"]
+
+class RevenueFormInput(BaseModel):
+    order_id: str
+    customer_name: str = ""
+    vehicle_info: str = ""
+    route: str = ""
+    deposit_amount: float = 0
+    total_price: Optional[float] = None
+    payment_method: str = "Zelle"
+    notes: str = ""
 
 
 # ==================== AUTHENTICATION ====================
@@ -657,8 +672,9 @@ async def update_company_settings(settings: CompanySettings, current_user: User 
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
+    is_admin = current_user.role in ("superadmin", "admin")
+
     total_leads = await db.quotes.count_documents({"status": "lead"})
-    total_quotes = await db.quotes.count_documents({"status": {"$in": ["quoted", "lead"]}})
     total_all_quotes = await db.quotes.count_documents({})
     total_orders = await db.orders.count_documents({})
     pending_quotes = await db.quotes.count_documents({"status": "quoted"})
@@ -667,25 +683,36 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
     total_users = await db.users.count_documents({})
     total_carriers = await db.carriers.count_documents({})
 
-    # Revenue from quotes that became orders
-    order_quotes = await db.orders.find({}, {"_id": 0, "quote_id": 1}).to_list(None)
-    quote_ids = [o["quote_id"] for o in order_quotes if o.get("quote_id")]
-    revenue = 0
-    if quote_ids:
-        revenue_docs = await db.quotes.find({"id": {"$in": quote_ids}}, {"_id": 0, "price": 1}).to_list(None)
-        revenue = sum(d.get("price", 0) for d in revenue_docs)
+    # Revenue from revenue_forms (deposit-based)
+    user_rev_query = {} if is_admin else {"submitted_by_id": current_user.id}
+    revenue_docs = await db.revenue_forms.find(user_rev_query, {"_id": 0, "deposit_amount": 1}).to_list(None)
+    total_revenue = sum(d.get("deposit_amount", 0) for d in revenue_docs)
+
+    # User's own revenue for target tracking
+    my_rev_docs = await db.revenue_forms.find({"submitted_by_id": current_user.id}, {"_id": 0, "deposit_amount": 1}).to_list(None)
+    my_revenue = sum(d.get("deposit_amount", 0) for d in my_rev_docs)
 
     conversion_rate = round((total_orders / total_all_quotes * 100), 1) if total_all_quotes > 0 else 0
 
-    # Recent quotes
     recent_quotes = await db.quotes.find({}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
     recent_orders = await db.orders.find({}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+
+    # Revenue target levels
+    target = 1500
+    if my_revenue >= 5000:
+        target = 5000
+    elif my_revenue >= 3000:
+        target = 5000
+    elif my_revenue >= 1500:
+        target = 3000
 
     return {
         "total_leads": total_leads,
         "total_quotes": total_all_quotes,
         "total_orders": total_orders,
-        "total_revenue": revenue,
+        "total_revenue": total_revenue,
+        "my_revenue": my_revenue,
+        "revenue_target": target,
         "pending_quotes": pending_quotes,
         "active_orders": active_orders,
         "delivered_orders": delivered_orders,
@@ -771,10 +798,19 @@ async def get_leads(
     search: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get leads (quotes with status='lead')"""
+    """Get leads. New leads visible only to assigned user. Admin/superadmin see all."""
+    is_admin = current_user.role in ("superadmin", "admin")
     query = {"status": "lead"}
-    if search:
+    if not is_admin:
+        # Non-admin users see: leads assigned to them OR legacy leads (no assigned_to_id)
         query["$or"] = [
+            {"assigned_to_id": current_user.id},
+            {"assigned_to_id": {"$exists": False}},
+            {"assigned_to_id": None},
+            {"assigned_to_id": ""},
+        ]
+    if search:
+        search_conds = [
             {"quote_number": {"$regex": search, "$options": "i"}},
             {"customer_name": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}},
@@ -783,6 +819,10 @@ async def get_leads(
             {"delivery_city": {"$regex": search, "$options": "i"}},
             {"vehicle_make": {"$regex": search, "$options": "i"}},
         ]
+        if "$or" in query:
+            query = {"$and": [{"status": "lead"}, {"$or": query["$or"]}, {"$or": search_conds}]}
+        else:
+            query["$or"] = search_conds
     total = await db.quotes.count_documents(query)
     leads = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return {"leads": leads, "total": total}
@@ -832,6 +872,7 @@ async def create_quote(data: QuoteCreateInput, current_user: User = Depends(get_
     doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     if not doc.get("agent_name"):
         doc["agent_name"] = current_user.full_name
+    doc["assigned_to_id"] = current_user.id
     await db.quotes.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -1271,6 +1312,85 @@ async def public_sign_agreement(agreement_id: str, sign_data: SignAgreementInput
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }})
     return {"message": "Agreement signed successfully"}
+
+
+# ==================== REVENUE FORMS ====================
+
+@api_router.post("/revenue")
+async def submit_revenue_form(data: RevenueFormInput, current_user: User = Depends(get_current_user)):
+    """Submit a revenue form for an order."""
+    order = await db.orders.find_one({"id": data.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    doc = data.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["order_number"] = order.get("order_number", "")
+    doc["submitted_by"] = current_user.full_name
+    doc["submitted_by_id"] = current_user.id
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    # Auto-fill if empty
+    if not doc["customer_name"]:
+        doc["customer_name"] = order.get("customer_name", "")
+    if not doc["vehicle_info"]:
+        doc["vehicle_info"] = " ".join(filter(None, [order.get("vehicle_year", ""), order.get("vehicle_make", ""), order.get("vehicle_model", "")]))
+    if not doc["route"]:
+        doc["route"] = f"{order.get('pickup_city', '')}, {order.get('pickup_state', '')} → {order.get('delivery_city', '')}, {order.get('delivery_state', '')}"
+    # Update order payment_method
+    await db.orders.update_one({"id": data.order_id}, {"$set": {"payment_method": data.payment_method}})
+    await db.revenue_forms.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.get("/revenue")
+async def get_revenue_forms(
+    skip: int = 0, limit: int = 100,
+    user_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get revenue forms. Non-admins see only their own."""
+    is_admin = current_user.role in ("superadmin", "admin")
+    query = {}
+    if not is_admin:
+        query["submitted_by_id"] = current_user.id
+    elif user_id:
+        query["submitted_by_id"] = user_id
+    total = await db.revenue_forms.count_documents(query)
+    forms = await db.revenue_forms.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    return {"forms": forms, "total": total}
+
+@api_router.get("/revenue/by-order/{order_id}")
+async def get_revenue_by_order(order_id: str, current_user: User = Depends(get_current_user)):
+    """Get revenue form for a specific order."""
+    form = await db.revenue_forms.find_one({"order_id": order_id}, {"_id": 0})
+    return form
+
+@api_router.get("/revenue/admin/summary")
+async def get_revenue_admin_summary(current_user: User = Depends(require_superadmin)):
+    """Super admin: revenue per user, by payment method, totals."""
+    all_forms = await db.revenue_forms.find({}, {"_id": 0}).to_list(None)
+    total_deposits = sum(f.get("deposit_amount", 0) for f in all_forms)
+    # Per user
+    by_user = {}
+    for f in all_forms:
+        uid = f.get("submitted_by", "Unknown")
+        if uid not in by_user:
+            by_user[uid] = {"name": uid, "user_id": f.get("submitted_by_id", ""), "total_deposit": 0, "count": 0}
+        by_user[uid]["total_deposit"] += f.get("deposit_amount", 0)
+        by_user[uid]["count"] += 1
+    # Per payment method
+    by_method = {}
+    for f in all_forms:
+        m = f.get("payment_method", "Other")
+        if m not in by_method:
+            by_method[m] = {"method": m, "total": 0, "count": 0}
+        by_method[m]["total"] += f.get("deposit_amount", 0)
+        by_method[m]["count"] += 1
+    return {
+        "total_deposits": total_deposits,
+        "total_forms": len(all_forms),
+        "by_user": list(by_user.values()),
+        "by_payment_method": list(by_method.values()),
+    }
 
 
 # ==================== LEAD INTAKE (VENDOR API) ====================

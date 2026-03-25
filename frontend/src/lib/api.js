@@ -109,4 +109,10 @@ export const signAgreement = (id, data) => api.post(`/agreements/${id}/sign`, da
 export const voidAgreement = (id) => api.post(`/agreements/${id}/void`);
 export const deleteAgreement = (id) => api.delete(`/agreements/${id}`);
 
+// Revenue
+export const submitRevenueForm = (data) => api.post('/revenue', data);
+export const getRevenueForms = (params = {}) => api.get('/revenue', { params });
+export const getRevenueByOrder = (orderId) => api.get(`/revenue/by-order/${orderId}`);
+export const getRevenueAdminSummary = () => api.get('/revenue/admin/summary');
+
 export default api;
