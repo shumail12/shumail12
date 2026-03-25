@@ -406,17 +406,68 @@ class CarrierInput(BaseModel):
 
 class InvoiceCreateInput(BaseModel):
     order_id: str
-    invoice_type: str = "customer"  # customer or driver
+    invoice_type: str = "customer"  # customer or carrier
     amount: float = 0
     deposit: float = 150
     notes: Optional[str] = ""
-    status: str = "unpaid"  # unpaid, paid, void
+    status: str = "unpaid"
 
 class InvoiceUpdateInput(BaseModel):
+    # Core
     amount: Optional[float] = None
     deposit: Optional[float] = None
     notes: Optional[str] = None
     status: Optional[str] = None
+    invoice_type: Optional[str] = None
+    # Customer info
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_address: Optional[str] = None
+    # Vehicle info
+    vehicle_year: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    vehicle_vin: Optional[str] = None
+    vehicle_color: Optional[str] = None
+    vehicle_condition: Optional[str] = None
+    # Route info
+    pickup_city: Optional[str] = None
+    pickup_state: Optional[str] = None
+    pickup_zip: Optional[str] = None
+    pickup_address: Optional[str] = None
+    pickup_contact: Optional[str] = None
+    pickup_phone: Optional[str] = None
+    pickup_date: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_state: Optional[str] = None
+    delivery_zip: Optional[str] = None
+    delivery_address: Optional[str] = None
+    delivery_contact: Optional[str] = None
+    delivery_phone: Optional[str] = None
+    delivery_date: Optional[str] = None
+    # Carrier info
+    carrier_name: Optional[str] = None
+    carrier_mc: Optional[str] = None
+    carrier_phone: Optional[str] = None
+    carrier_email: Optional[str] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    # Pricing
+    deposit_amount: Optional[float] = None
+    carrier_pay: Optional[float] = None
+    total_price: Optional[float] = None
+    cod_amount: Optional[float] = None
+    shipping_type: Optional[str] = None
+    estimated_distance: Optional[float] = None
+    payment_method: Optional[str] = None
+    # Terms
+    terms: Optional[str] = None
+    special_conditions: Optional[str] = None
+    # Signature
+    signature_data: Optional[str] = None
+    signer_name: Optional[str] = None
 
 class CompanySettings(BaseModel):
     company_name: str = "Breamway Auto Transport"
@@ -1117,6 +1168,8 @@ async def get_invoice(invoice_id: str, current_user: User = Depends(get_current_
 
 @api_router.put("/invoices/{invoice_id}")
 async def update_invoice(invoice_id: str, data: InvoiceUpdateInput, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ("superadmin", "admin"):
+        raise HTTPException(status_code=403, detail="Only admin/superadmin can edit invoices")
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -1124,7 +1177,28 @@ async def update_invoice(invoice_id: str, data: InvoiceUpdateInput, current_user
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     if update_dict.get("status") == "paid" and existing.get("status") != "paid":
         update_dict["paid_date"] = datetime.now(timezone.utc).isoformat()
+    if update_dict.get("signature_data") and update_dict.get("signer_name"):
+        update_dict["signed_at"] = datetime.now(timezone.utc).isoformat()
+        update_dict["status"] = "signed"
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_dict})
+    updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/invoices/{invoice_id}/sign")
+async def sign_invoice(invoice_id: str, sign_data: SignAgreementInput):
+    """Public endpoint for signing invoices/agreements"""
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") == "signed":
+        raise HTTPException(status_code=400, detail="Already signed")
+    await db.invoices.update_one({"id": invoice_id}, {"$set": {
+        "signature_data": sign_data.signature_data,
+        "signer_name": sign_data.signer_name,
+        "signed_at": datetime.now(timezone.utc).isoformat(),
+        "status": "signed",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }})
     updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     return updated
 
@@ -1134,6 +1208,131 @@ async def delete_invoice(invoice_id: str, current_user: User = Depends(get_curre
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice deleted"}
+
+DEFAULT_CUSTOMER_INVOICE_TERMS = """VEHICLE TRANSPORT AGREEMENT & INVOICE
+
+This Agreement is entered into between Breamway Auto Transport, LLC ("Broker"), USDOT# 4246498, MC# 1622825, and the Customer identified below.
+
+1. SERVICES: Broker agrees to arrange transportation of the vehicle(s) described herein from the designated pickup location to the designated delivery location using a licensed and insured motor carrier.
+
+2. PRICING & PAYMENT: The total price quoted includes all broker fees and carrier charges. A deposit is required at the time of booking to reserve the transport. The remaining balance (COD) is due to the carrier upon delivery unless other payment arrangements have been made in advance.
+
+3. INSURANCE: All carriers contracted by Broker maintain cargo insurance coverage as required by the Federal Motor Carrier Safety Administration (FMCSA). Additional insurance may be purchased at Customer's expense.
+
+4. PICKUP & DELIVERY: All dates provided are estimated. Broker will make commercially reasonable efforts to meet the estimated schedule. Delays caused by weather, traffic, mechanical issues, or other circumstances beyond reasonable control shall not constitute a breach of this Agreement.
+
+5. VEHICLE CONDITION: Customer must remove all personal belongings from the vehicle prior to pickup. Broker is not liable for items left in the vehicle. A vehicle condition report will be completed at both pickup and delivery. Customer should note any pre-existing damage.
+
+6. CANCELLATION POLICY: Customer may cancel this Agreement with written notice. If cancellation occurs after a carrier has been dispatched, a cancellation fee may apply. The deposit is non-refundable once a carrier has been assigned.
+
+7. LIABILITY: Broker acts solely as an intermediary between Customer and Carrier. The Carrier assumes full liability for the vehicle during transport per applicable FMCSA regulations and their own insurance policy.
+
+8. PAYMENT DEFAULT: Failure to pay the balance upon delivery may result in the carrier exercising a lien on the vehicle until full payment is received.
+
+9. GOVERNING LAW: This Agreement shall be governed by the laws of the State of New Jersey.
+
+By signing below, Customer acknowledges having read, understood, and agreed to all terms and conditions set forth in this Agreement."""
+
+DEFAULT_CARRIER_INVOICE_TERMS = """CARRIER DISPATCH AGREEMENT & INVOICE
+
+This Agreement is entered into between Breamway Auto Transport, LLC ("Broker"), USDOT# 4246498, MC# 1622825, and the Carrier identified below.
+
+1. DISPATCH AGREEMENT: Carrier agrees to transport the vehicle(s) described herein from the designated pickup location to the designated delivery location per the terms outlined below.
+
+2. CARRIER PAY: Broker agrees to pay Carrier the amount specified upon confirmed delivery of the vehicle in the same condition as noted at pickup. Payment will be processed within 30 days of delivery confirmation unless otherwise agreed.
+
+3. INSURANCE REQUIREMENTS: Carrier must maintain valid cargo insurance with a minimum coverage of $100,000 and auto liability insurance of $750,000 as required by FMCSA regulations. Proof of insurance must be provided upon request.
+
+4. PICKUP & DELIVERY: Carrier agrees to pick up the vehicle within the agreed timeframe. Carrier must contact the pickup and delivery contacts at least 24 hours before arrival. Any delays must be communicated to Broker immediately.
+
+5. VEHICLE CONDITION: Carrier must complete a thorough vehicle inspection at pickup and delivery. Any damage occurring during transport is the sole responsibility of the Carrier and must be reported immediately.
+
+6. COD COLLECTION: If applicable, Carrier is authorized to collect the Cash-On-Delivery (COD) amount from the Customer upon delivery. COD must be collected before releasing the vehicle.
+
+7. COMPLIANCE: Carrier warrants that it is properly licensed, insured, and authorized to operate as a motor carrier under all applicable federal and state regulations.
+
+8. INDEMNIFICATION: Carrier agrees to indemnify and hold Broker harmless from any claims, damages, or losses arising from Carrier's transportation of the vehicle(s).
+
+By signing below, Carrier acknowledges acceptance of the dispatch and agrees to all terms and conditions set forth in this Agreement."""
+
+@api_router.post("/orders/{order_id}/generate-invoice")
+async def generate_invoice_from_order(order_id: str, invoice_type: str = "customer", current_user: User = Depends(get_current_user)):
+    """Generate a professional invoice/agreement from an order"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    quote = await db.quotes.find_one({"id": order.get("quote_id", "")}, {"_id": 0})
+
+    prefix = "CUS" if invoice_type == "customer" else "CAR"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "invoice_number": f"INV-{prefix}-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}",
+        "order_id": order_id,
+        "order_number": order.get("order_number", ""),
+        "quote_number": order.get("quote_number", ""),
+        "invoice_type": invoice_type,
+        # Customer info
+        "customer_name": order.get("customer_name", ""),
+        "customer_email": order.get("email", ""),
+        "customer_phone": order.get("phone", ""),
+        "customer_address": "",
+        # Vehicle info
+        "vehicle_year": order.get("vehicle_year", ""),
+        "vehicle_make": order.get("vehicle_make", ""),
+        "vehicle_model": order.get("vehicle_model", ""),
+        "vehicle_type": order.get("vehicle_type", ""),
+        "vehicle_vin": "",
+        "vehicle_color": "",
+        "vehicle_condition": order.get("vehicle_condition", "running"),
+        # Route info
+        "pickup_city": order.get("pickup_city", ""),
+        "pickup_state": order.get("pickup_state", ""),
+        "pickup_zip": order.get("pickup_zip", ""),
+        "pickup_address": "",
+        "pickup_contact": order.get("customer_name", ""),
+        "pickup_phone": order.get("phone", ""),
+        "pickup_date": order.get("pickup_date", ""),
+        "delivery_city": order.get("delivery_city", ""),
+        "delivery_state": order.get("delivery_state", ""),
+        "delivery_zip": order.get("delivery_zip", ""),
+        "delivery_address": "",
+        "delivery_contact": "",
+        "delivery_phone": "",
+        "delivery_date": order.get("delivery_date", ""),
+        # Carrier info
+        "carrier_name": order.get("carrier_name", ""),
+        "carrier_mc": order.get("carrier_mc", ""),
+        "carrier_phone": order.get("carrier_phone", ""),
+        "carrier_email": "",
+        "driver_name": order.get("driver_name", ""),
+        "driver_phone": order.get("driver_phone", ""),
+        # Pricing
+        "deposit_amount": order.get("deposit_fee", 0) or 0,
+        "carrier_pay": order.get("carrier_fee", 0) or 0,
+        "total_price": order.get("price", 0) or 0,
+        "cod_amount": max(0, (order.get("price", 0) or 0) - (order.get("deposit_fee", 0) or 0)),
+        "amount": order.get("price", 0) or 0,
+        "shipping_type": order.get("shipping_type", "standard"),
+        "estimated_distance": order.get("estimated_distance", 0) or (quote.get("distance", 0) if quote else 0),
+        "payment_method": order.get("payment_method", ""),
+        # Terms
+        "terms": DEFAULT_CUSTOMER_INVOICE_TERMS if invoice_type == "customer" else DEFAULT_CARRIER_INVOICE_TERMS,
+        "special_conditions": "",
+        "notes": "",
+        # Signature
+        "signature_data": None,
+        "signer_name": None,
+        "signed_at": None,
+        # Meta
+        "status": "draft",
+        "created_by": current_user.full_name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.invoices.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
 
 
 # ==================== AGREEMENT/CONTRACT ROUTES ====================

@@ -115,4 +115,9 @@ export const getRevenueForms = (params = {}) => api.get('/revenue', { params });
 export const getRevenueByOrder = (orderId) => api.get(`/revenue/by-order/${orderId}`);
 export const getRevenueAdminSummary = () => api.get('/revenue/admin/summary');
 
+// Generate Invoice from Order
+export const generateInvoiceFromOrder = (orderId, invoiceType = 'customer') =>
+  api.post(`/orders/${orderId}/generate-invoice?invoice_type=${invoiceType}`);
+export const signInvoice = (invoiceId, data) => api.post(`/invoices/${invoiceId}/sign`, data);
+
 export default api;

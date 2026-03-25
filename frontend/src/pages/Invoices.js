@@ -22,7 +22,7 @@ import {
 import { Plus, Search, Edit, Receipt, DollarSign, Calendar, CheckCircle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
-const statusOptions = ['unpaid', 'paid', 'overdue'];
+const statusOptions = ['unpaid', 'paid', 'overdue', 'draft', 'signed'];
 
 const InvoiceForm = ({ invoice, orders, quotes, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState(invoice || {
@@ -196,8 +196,8 @@ const Invoices = () => {
         getQuotes()
       ]);
       setInvoices(invoicesRes.data);
-      setOrders(ordersRes.data);
-      setQuotes(quotesRes.data);
+      setOrders(ordersRes.data.orders || []);
+      setQuotes(quotesRes.data.quotes || []);
     } catch (error) {
       toast.error('Failed to fetch data');
     } finally {
@@ -250,7 +250,9 @@ const Invoices = () => {
     const statusMap = {
       unpaid: 'status-unpaid',
       paid: 'status-paid',
-      overdue: 'status-overdue'
+      overdue: 'status-overdue',
+      draft: 'status-pending',
+      signed: 'status-delivered',
     };
     return statusMap[status] || 'status-unpaid';
   };
@@ -370,10 +372,10 @@ const Invoices = () => {
               <thead>
                 <tr>
                   <th>Invoice #</th>
+                  <th>Type</th>
                   <th>Order #</th>
+                  <th>Customer / Carrier</th>
                   <th>Amount</th>
-                  <th>Due Date</th>
-                  <th>Paid Date</th>
                   <th>Status</th>
                   <th className="text-right">Actions</th>
                 </tr>
@@ -381,27 +383,26 @@ const Invoices = () => {
               <tbody>
                 {filteredInvoices.map((invoice) => {
                   const order = getOrderForInvoice(invoice.order_id);
+                  const isCarrier = invoice.invoice_type === 'carrier';
                   return (
                     <tr key={invoice.id} data-testid={`invoice-row-${invoice.id}`}>
                       <td>
                         <span className="font-mono font-medium text-slate-900">{invoice.invoice_number}</span>
                       </td>
                       <td>
-                        <span className="font-mono text-sm text-slate-600">{order?.order_number || '-'}</span>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${isCarrier ? 'bg-slate-100 text-slate-700' : 'bg-blue-50 text-blue-700'}`}>
+                          {isCarrier ? 'Carrier' : 'Customer'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="font-mono text-sm text-slate-600">{invoice.order_number || order?.order_number || '-'}</span>
+                      </td>
+                      <td>
+                        <span className="text-sm text-slate-700">{isCarrier ? (invoice.carrier_name || '-') : (invoice.customer_name || '-')}</span>
                       </td>
                       <td>
                         <span className="font-mono font-medium text-emerald-600">
-                          ${invoice.amount?.toLocaleString()}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="font-mono text-sm text-slate-600">
-                          {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '-'}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="font-mono text-sm text-slate-600">
-                          {invoice.paid_date ? new Date(invoice.paid_date).toLocaleDateString() : '-'}
+                          ${(invoice.total_price || invoice.amount || 0).toLocaleString()}
                         </span>
                       </td>
                       <td>

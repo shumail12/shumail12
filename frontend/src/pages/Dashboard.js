@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import MotivationalPopup from '../components/MotivationalPopup';
 import api from '../lib/api';
 import {
   BarChart3, FileText, ShoppingCart, DollarSign,
@@ -63,10 +64,20 @@ const RevenueTarget = ({ current, target }) => {
 };
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, justLoggedIn, clearJustLoggedIn } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showMotivation, setShowMotivation] = useState(false);
+
+  useEffect(() => {
+    if (justLoggedIn) {
+      setShowMotivation(true);
+      clearJustLoggedIn();
+    }
+  }, [justLoggedIn, clearJustLoggedIn]);
+
+  const closePopup = useCallback(() => setShowMotivation(false), []);
 
   useEffect(() => {
     const fetch = async () => {
@@ -85,6 +96,7 @@ const Dashboard = () => {
 
   return (
     <Layout>
+      <MotivationalPopup show={showMotivation} onClose={closePopup} />
       <Header title="Dashboard">
         <p className="text-sm text-slate-500">Welcome back, <strong>{user?.full_name}</strong></p>
       </Header>

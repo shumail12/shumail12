@@ -1,22 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Truck, AlertCircle, Loader2, Shield, Clock, DollarSign, MapPin } from 'lucide-react';
+import { Truck, AlertCircle, Loader2, Shield, Clock, DollarSign, MapPin, Info } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, sessionExpired, setSessionExpired } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSessionExpired(false);
     setLoading(true);
 
     try {
@@ -152,6 +153,13 @@ const Login = () => {
               </h3>
               <p className="text-slate-500">Sign in to manage your quotes & shipments</p>
             </div>
+
+            {sessionExpired && (
+              <div className="flex items-center gap-2 p-4 mb-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm" data-testid="session-expired-msg">
+                <Info className="w-5 h-5 flex-shrink-0" />
+                <span>Session expired. Please log in again.</span>
+              </div>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 p-4 mb-6 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm animate-shake" data-testid="login-error">

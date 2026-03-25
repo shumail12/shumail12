@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
 const AuthContext = createContext(null);
 
@@ -18,6 +19,39 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
+  const timerRef = useRef(null);
+
+  const logout = useCallback((expired = false) => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    if (expired) setSessionExpired(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (user) {
+      timerRef.current = setTimeout(() => logout(true), INACTIVITY_TIMEOUT);
+    }
+  }, [user, logout]);
+
+  // Set up inactivity listeners
+  useEffect(() => {
+    if (!user) return;
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'mousemove'];
+    const handler = () => resetInactivityTimer();
+    events.forEach(e => window.addEventListener(e, handler, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, handler));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [user, resetInactivityTimer]);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -45,22 +79,24 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('token', access_token);
     setToken(access_token);
     setUser(userData);
+    setSessionExpired(false);
+    setJustLoggedIn(true);
     return userData;
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-  };
+  const clearJustLoggedIn = useCallback(() => setJustLoggedIn(false), []);
 
   const value = {
     user,
     token,
     loading,
     login,
-    logout,
-    isAuthenticated: !!user
+    logout: () => logout(false),
+    isAuthenticated: !!user,
+    sessionExpired,
+    setSessionExpired,
+    justLoggedIn,
+    clearJustLoggedIn,
   };
 
   return (

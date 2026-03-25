@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
-import { getOrder, updateOrder, submitRevenueForm, getRevenueByOrder } from '../lib/api';
+import { getOrder, updateOrder, submitRevenueForm, getRevenueByOrder, generateInvoiceFromOrder } from '../lib/api';
 import { PricingEditor } from '../components/PricingEditor';
 import USARouteMap from '../components/USARouteMap';
 import TransportFacts from '../components/TransportFacts';
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '../components/ui/dialog';
-import { ArrowLeft, Save, ExternalLink, DollarSign, CheckCircle, Map, CreditCard } from 'lucide-react';
+import { ArrowLeft, Save, ExternalLink, DollarSign, CheckCircle, Map, CreditCard, FileText, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusOptions = [
@@ -49,6 +49,7 @@ const OrderDetail = () => {
     deposit_amount: 0, total_price: 0, payment_method: 'Zelle', notes: '',
   });
   const [submittingRevenue, setSubmittingRevenue] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -109,6 +110,17 @@ const OrderDetail = () => {
     }
   };
 
+  const handleGenerateInvoice = async (type) => {
+    setGeneratingInvoice(true);
+    try {
+      const res = await generateInvoiceFromOrder(id, type);
+      toast.success(`${type === 'customer' ? 'Customer' : 'Carrier'} invoice generated!`);
+      navigate(`/invoices/${res.data.id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to generate invoice');
+    } finally { setGeneratingInvoice(false); }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -138,8 +150,14 @@ const OrderDetail = () => {
   return (
     <Layout>
       <Header title={`Order ${order?.order_number || ''}`}>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={() => navigate('/orders')}><ArrowLeft className="w-4 h-4 mr-2" />Back</Button>
+          <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => handleGenerateInvoice('customer')} disabled={generatingInvoice} data-testid="gen-customer-invoice-btn">
+            <FileText className="w-4 h-4 mr-2" />Customer Invoice
+          </Button>
+          <Button variant="outline" className="text-slate-600 border-slate-300 hover:bg-slate-50" onClick={() => handleGenerateInvoice('carrier')} disabled={generatingInvoice} data-testid="gen-carrier-invoice-btn">
+            <Truck className="w-4 h-4 mr-2" />Carrier Invoice
+          </Button>
           {!existingRevenue ? (
             <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={openRevenueForm} data-testid="fill-revenue-btn">
               <DollarSign className="w-4 h-4 mr-2" />Fill Revenue
