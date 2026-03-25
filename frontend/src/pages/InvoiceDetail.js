@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Save, Printer, Truck, FileText, PenLine, CheckCircle, User, Package, MapPin, CreditCard, Shield, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Printer, Truck, FileText, PenLine, CheckCircle, User, Package, MapPin, CreditCard, Shield, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../lib/api';
 
@@ -82,16 +82,25 @@ const InvoiceDetail = () => {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({});
 
+  const isSuperAdmin = user?.role === 'superadmin';
   const canEdit = user?.role === 'superadmin' || user?.role === 'admin';
   const isCustomer = (form.invoice_type || 'customer') === 'customer';
   const isSigned = form.status === 'signed';
+  // Superadmin can edit everything before signing. Admin can edit unsigned only.
+  const editable = canEdit && (!isSigned || isSuperAdmin);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await api.get(`/invoices/${id}`);
         setInvoice(res.data);
-        setForm(res.data);
+        setForm({
+          ...res.data,
+          company_name: res.data.company_name || 'Breamway Auto Transport',
+          company_subtitle: res.data.company_subtitle || 'Shumail Technologies LLC',
+          company_dot: res.data.company_dot || 'USDOT# 4246498 | MC# 1622825',
+          document_title: res.data.document_title || (res.data.invoice_type === 'carrier' ? 'Carrier Dispatch Agreement & Invoice' : 'Customer Transport Agreement & Invoice'),
+        });
       } catch { toast.error('Failed to load invoice'); navigate('/invoices'); }
       finally { setLoading(false); }
     };
@@ -104,7 +113,7 @@ const InvoiceDetail = () => {
     try {
       const res = await api.put(`/invoices/${id}`, form);
       setInvoice(res.data);
-      setForm(res.data);
+      setForm(prev => ({ ...prev, ...res.data }));
       toast.success('Invoice saved successfully');
     } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save'); }
     finally { setSaving(false); }
@@ -117,7 +126,6 @@ const InvoiceDetail = () => {
 
   if (loading) return <Layout><div className="flex items-center justify-center h-[80vh]"><div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full" /></div></Layout>;
 
-  const vehicle = [form.vehicle_year, form.vehicle_make, form.vehicle_model].filter(Boolean).join(' ');
   const route = `${form.pickup_city || ''}, ${form.pickup_state || ''} \u2192 ${form.delivery_city || ''}, ${form.delivery_state || ''}`;
 
   return (
@@ -126,7 +134,7 @@ const InvoiceDetail = () => {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => navigate('/invoices')} data-testid="back-btn"><ArrowLeft className="w-4 h-4 mr-2" />Back</Button>
           <Button variant="outline" onClick={handlePrint} data-testid="print-invoice-btn"><Printer className="w-4 h-4 mr-2" />Print</Button>
-          {canEdit && !isSigned && (
+          {editable && (
             <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSave} disabled={saving} data-testid="save-invoice-btn">
               <Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save'}
             </Button>
@@ -135,7 +143,15 @@ const InvoiceDetail = () => {
       </Header>
 
       <div className="p-6 max-w-4xl mx-auto print:p-0 print:max-w-none" data-testid="invoice-detail-page">
-        {/* Status Banner */}
+        {/* Superadmin Edit Mode Indicator */}
+        {isSuperAdmin && !isSigned && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-center gap-2" data-testid="edit-mode-banner">
+            <Pencil className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-medium text-amber-800">Superadmin Edit Mode — All fields including header, terms & branding are editable</span>
+          </div>
+        )}
+
+        {/* Signed Banner */}
         {isSigned && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 flex items-center gap-2" data-testid="signed-banner">
             <CheckCircle className="w-5 h-5 text-emerald-600" />
@@ -153,10 +169,26 @@ const InvoiceDetail = () => {
                 <div className="w-14 h-14 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-sm">
                   <Truck className="w-8 h-8 text-white" />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">Breamway Auto Transport</h1>
-                  <p className="text-blue-200 text-sm">Shumail Technologies LLC</p>
-                  <p className="text-blue-300/70 text-xs mt-1">USDOT# 4246498 | MC# 1622825</p>
+                <div className="space-y-1">
+                  {isSuperAdmin && !isSigned ? (
+                    <>
+                      <input value={form.company_name || ''} onChange={updateField('company_name')}
+                        className="bg-white/10 text-white text-2xl font-bold tracking-tight border border-white/20 rounded-lg px-2 py-1 w-full focus:outline-none focus:border-white/50 placeholder-white/40"
+                        placeholder="Company Name" data-testid="edit-company-name" />
+                      <input value={form.company_subtitle || ''} onChange={updateField('company_subtitle')}
+                        className="bg-white/10 text-blue-200 text-sm border border-white/20 rounded-lg px-2 py-0.5 w-full focus:outline-none focus:border-white/50 placeholder-white/30"
+                        placeholder="Subtitle" data-testid="edit-company-subtitle" />
+                      <input value={form.company_dot || ''} onChange={updateField('company_dot')}
+                        className="bg-white/10 text-blue-300/70 text-xs border border-white/20 rounded-lg px-2 py-0.5 w-full focus:outline-none focus:border-white/50 placeholder-white/20"
+                        placeholder="DOT & MC Numbers" data-testid="edit-company-dot" />
+                    </>
+                  ) : (
+                    <>
+                      <h1 className="text-2xl font-bold text-white tracking-tight">{form.company_name || 'Breamway Auto Transport'}</h1>
+                      <p className="text-blue-200 text-sm">{form.company_subtitle || 'Shumail Technologies LLC'}</p>
+                      <p className="text-blue-300/70 text-xs mt-1">{form.company_dot || 'USDOT# 4246498 | MC# 1622825'}</p>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -174,9 +206,15 @@ const InvoiceDetail = () => {
           {/* Document Type Title */}
           <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 print:bg-white">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                {isCustomer ? 'Customer Transport Agreement & Invoice' : 'Carrier Dispatch Agreement & Invoice'}
-              </h2>
+              {isSuperAdmin && !isSigned ? (
+                <input value={form.document_title || ''} onChange={updateField('document_title')}
+                  className="text-sm font-bold text-slate-700 uppercase tracking-wider bg-transparent border border-slate-300 rounded-lg px-2 py-1 w-full max-w-md focus:outline-none focus:border-blue-400"
+                  data-testid="edit-document-title" />
+              ) : (
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                  {form.document_title || (isCustomer ? 'Customer Transport Agreement & Invoice' : 'Carrier Dispatch Agreement & Invoice')}
+                </h2>
+              )}
               <p className="text-xs text-slate-500">Date: {invoice?.created_at ? new Date(invoice.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</p>
             </div>
           </div>
@@ -187,30 +225,29 @@ const InvoiceDetail = () => {
               <div>
                 <SectionTitle icon={User} title="Customer Information" />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Field label="Full Name" value={form.customer_name} onChange={updateField('customer_name')} disabled={!canEdit || isSigned} className="col-span-2" />
-                  <Field label="Email" value={form.customer_email} onChange={updateField('customer_email')} disabled={!canEdit || isSigned} />
-                  <Field label="Phone" value={form.customer_phone} onChange={updateField('customer_phone')} disabled={!canEdit || isSigned} />
-                  <Field label="Address" value={form.customer_address} onChange={updateField('customer_address')} disabled={!canEdit || isSigned} className="col-span-4" />
+                  <Field label="Full Name" value={form.customer_name} onChange={updateField('customer_name')} disabled={!editable} className="col-span-2" />
+                  <Field label="Email" value={form.customer_email} onChange={updateField('customer_email')} disabled={!editable} />
+                  <Field label="Phone" value={form.customer_phone} onChange={updateField('customer_phone')} disabled={!editable} />
+                  <Field label="Address" value={form.customer_address} onChange={updateField('customer_address')} disabled={!editable} className="col-span-4" />
                 </div>
               </div>
             ) : (
               <div>
                 <SectionTitle icon={Shield} title="Carrier Information" color="slate" />
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <Field label="Carrier Name" value={form.carrier_name} onChange={updateField('carrier_name')} disabled={!canEdit || isSigned} className="col-span-2" />
-                  <Field label="MC Number" value={form.carrier_mc} onChange={updateField('carrier_mc')} disabled={!canEdit || isSigned} />
-                  <Field label="Carrier Phone" value={form.carrier_phone} onChange={updateField('carrier_phone')} disabled={!canEdit || isSigned} />
-                  <Field label="Carrier Email" value={form.carrier_email} onChange={updateField('carrier_email')} disabled={!canEdit || isSigned} className="col-span-2" />
-                  <Field label="Driver Name" value={form.driver_name} onChange={updateField('driver_name')} disabled={!canEdit || isSigned} />
-                  <Field label="Driver Phone" value={form.driver_phone} onChange={updateField('driver_phone')} disabled={!canEdit || isSigned} />
+                  <Field label="Carrier Name" value={form.carrier_name} onChange={updateField('carrier_name')} disabled={!editable} className="col-span-2" />
+                  <Field label="MC Number" value={form.carrier_mc} onChange={updateField('carrier_mc')} disabled={!editable} />
+                  <Field label="Carrier Phone" value={form.carrier_phone} onChange={updateField('carrier_phone')} disabled={!editable} />
+                  <Field label="Carrier Email" value={form.carrier_email} onChange={updateField('carrier_email')} disabled={!editable} className="col-span-2" />
+                  <Field label="Driver Name" value={form.driver_name} onChange={updateField('driver_name')} disabled={!editable} />
+                  <Field label="Driver Phone" value={form.driver_phone} onChange={updateField('driver_phone')} disabled={!editable} />
                 </div>
-                {/* Also show customer for carrier reference */}
                 <div className="mt-4 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Customer Reference</p>
-                  <div className="grid grid-cols-3 gap-3 text-sm">
-                    <div><span className="text-slate-400 text-xs">Name:</span> <span className="font-medium">{form.customer_name || '-'}</span></div>
-                    <div><span className="text-slate-400 text-xs">Phone:</span> <span className="font-medium">{form.customer_phone || '-'}</span></div>
-                    <div><span className="text-slate-400 text-xs">Email:</span> <span className="font-medium">{form.customer_email || '-'}</span></div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Field label="Name" value={form.customer_name} onChange={updateField('customer_name')} disabled={!editable} />
+                    <Field label="Phone" value={form.customer_phone} onChange={updateField('customer_phone')} disabled={!editable} />
+                    <Field label="Email" value={form.customer_email} onChange={updateField('customer_email')} disabled={!editable} className="col-span-2" />
                   </div>
                 </div>
               </div>
@@ -220,15 +257,15 @@ const InvoiceDetail = () => {
             <div>
               <SectionTitle icon={Package} title="Vehicle Information" color="indigo" />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Field label="Year" value={form.vehicle_year} onChange={updateField('vehicle_year')} disabled={!canEdit || isSigned} />
-                <Field label="Make" value={form.vehicle_make} onChange={updateField('vehicle_make')} disabled={!canEdit || isSigned} />
-                <Field label="Model" value={form.vehicle_model} onChange={updateField('vehicle_model')} disabled={!canEdit || isSigned} />
-                <Field label="Type" value={form.vehicle_type} onChange={updateField('vehicle_type')} disabled={!canEdit || isSigned} placeholder="Sedan, SUV, Truck..." />
-                <Field label="VIN" value={form.vehicle_vin} onChange={updateField('vehicle_vin')} disabled={!canEdit || isSigned} className="col-span-2" placeholder="Vehicle Identification Number" />
-                <Field label="Color" value={form.vehicle_color} onChange={updateField('vehicle_color')} disabled={!canEdit || isSigned} />
+                <Field label="Year" value={form.vehicle_year} onChange={updateField('vehicle_year')} disabled={!editable} />
+                <Field label="Make" value={form.vehicle_make} onChange={updateField('vehicle_make')} disabled={!editable} />
+                <Field label="Model" value={form.vehicle_model} onChange={updateField('vehicle_model')} disabled={!editable} />
+                <Field label="Type" value={form.vehicle_type} onChange={updateField('vehicle_type')} disabled={!editable} placeholder="Sedan, SUV, Truck..." />
+                <Field label="VIN" value={form.vehicle_vin} onChange={updateField('vehicle_vin')} disabled={!editable} className="col-span-2" placeholder="Vehicle Identification Number" />
+                <Field label="Color" value={form.vehicle_color} onChange={updateField('vehicle_color')} disabled={!editable} />
                 <div>
                   <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Condition</Label>
-                  <Select value={form.vehicle_condition || 'running'} onValueChange={v => setForm(f => ({ ...f, vehicle_condition: v }))} disabled={!canEdit || isSigned}>
+                  <Select value={form.vehicle_condition || 'running'} onValueChange={v => setForm(f => ({ ...f, vehicle_condition: v }))} disabled={!editable}>
                     <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="running">Running</SelectItem>
@@ -248,26 +285,26 @@ const InvoiceDetail = () => {
                 <div className="p-4 border border-blue-100 rounded-lg bg-blue-50/30">
                   <p className="text-xs font-bold text-blue-700 uppercase mb-3">Pickup Location</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="City" value={form.pickup_city} onChange={updateField('pickup_city')} disabled={!canEdit || isSigned} />
-                    <Field label="State" value={form.pickup_state} onChange={updateField('pickup_state')} disabled={!canEdit || isSigned} />
-                    <Field label="Zip Code" value={form.pickup_zip} onChange={updateField('pickup_zip')} disabled={!canEdit || isSigned} />
-                    <Field label="Date" value={form.pickup_date} onChange={updateField('pickup_date')} type="date" disabled={!canEdit || isSigned} />
-                    <Field label="Address" value={form.pickup_address} onChange={updateField('pickup_address')} disabled={!canEdit || isSigned} className="col-span-2" />
-                    <Field label="Contact Name" value={form.pickup_contact} onChange={updateField('pickup_contact')} disabled={!canEdit || isSigned} />
-                    <Field label="Contact Phone" value={form.pickup_phone} onChange={updateField('pickup_phone')} disabled={!canEdit || isSigned} />
+                    <Field label="City" value={form.pickup_city} onChange={updateField('pickup_city')} disabled={!editable} />
+                    <Field label="State" value={form.pickup_state} onChange={updateField('pickup_state')} disabled={!editable} />
+                    <Field label="Zip Code" value={form.pickup_zip} onChange={updateField('pickup_zip')} disabled={!editable} />
+                    <Field label="Date" value={form.pickup_date} onChange={updateField('pickup_date')} type="date" disabled={!editable} />
+                    <Field label="Address" value={form.pickup_address} onChange={updateField('pickup_address')} disabled={!editable} className="col-span-2" />
+                    <Field label="Contact Name" value={form.pickup_contact} onChange={updateField('pickup_contact')} disabled={!editable} />
+                    <Field label="Contact Phone" value={form.pickup_phone} onChange={updateField('pickup_phone')} disabled={!editable} />
                   </div>
                 </div>
                 {/* Delivery */}
                 <div className="p-4 border border-emerald-100 rounded-lg bg-emerald-50/30">
                   <p className="text-xs font-bold text-emerald-700 uppercase mb-3">Delivery Location</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="City" value={form.delivery_city} onChange={updateField('delivery_city')} disabled={!canEdit || isSigned} />
-                    <Field label="State" value={form.delivery_state} onChange={updateField('delivery_state')} disabled={!canEdit || isSigned} />
-                    <Field label="Zip Code" value={form.delivery_zip} onChange={updateField('delivery_zip')} disabled={!canEdit || isSigned} />
-                    <Field label="Date" value={form.delivery_date} onChange={updateField('delivery_date')} type="date" disabled={!canEdit || isSigned} />
-                    <Field label="Address" value={form.delivery_address} onChange={updateField('delivery_address')} disabled={!canEdit || isSigned} className="col-span-2" />
-                    <Field label="Contact Name" value={form.delivery_contact} onChange={updateField('delivery_contact')} disabled={!canEdit || isSigned} />
-                    <Field label="Contact Phone" value={form.delivery_phone} onChange={updateField('delivery_phone')} disabled={!canEdit || isSigned} />
+                    <Field label="City" value={form.delivery_city} onChange={updateField('delivery_city')} disabled={!editable} />
+                    <Field label="State" value={form.delivery_state} onChange={updateField('delivery_state')} disabled={!editable} />
+                    <Field label="Zip Code" value={form.delivery_zip} onChange={updateField('delivery_zip')} disabled={!editable} />
+                    <Field label="Date" value={form.delivery_date} onChange={updateField('delivery_date')} type="date" disabled={!editable} />
+                    <Field label="Address" value={form.delivery_address} onChange={updateField('delivery_address')} disabled={!editable} className="col-span-2" />
+                    <Field label="Contact Name" value={form.delivery_contact} onChange={updateField('delivery_contact')} disabled={!editable} />
+                    <Field label="Contact Phone" value={form.delivery_phone} onChange={updateField('delivery_phone')} disabled={!editable} />
                   </div>
                 </div>
               </div>
@@ -288,22 +325,21 @@ const InvoiceDetail = () => {
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Deposit</Label>
                         <Input type="number" step="0.01" value={form.deposit_amount || 0} onChange={updateNumField('deposit_amount')}
-                          disabled={!canEdit || isSigned} className="mt-1 h-10 text-lg font-bold text-blue-700 font-mono" data-testid="input-deposit" />
+                          disabled={!editable} className="mt-1 h-10 text-lg font-bold text-blue-700 font-mono" data-testid="input-deposit" />
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">COD (Balance Due)</Label>
                         <Input type="number" step="0.01" value={form.cod_amount || 0} onChange={updateNumField('cod_amount')}
-                          disabled={!canEdit || isSigned} className="mt-1 h-10 text-lg font-bold text-amber-700 font-mono" data-testid="input-cod" />
+                          disabled={!editable} className="mt-1 h-10 text-lg font-bold text-amber-700 font-mono" data-testid="input-cod" />
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Total Price</Label>
-                        <div className="mt-1 h-10 px-3 flex items-center bg-emerald-50 rounded-md border border-emerald-200">
-                          <span className="text-lg font-bold text-emerald-700 font-mono" data-testid="total-price">${(form.total_price || 0).toLocaleString()}</span>
-                        </div>
+                        <Input type="number" step="0.01" value={form.total_price || 0} onChange={updateNumField('total_price')}
+                          disabled={!editable} className="mt-1 h-10 text-lg font-bold text-emerald-700 font-mono" data-testid="total-price" />
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Payment Method</Label>
-                        <Select value={form.payment_method || ''} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))} disabled={!canEdit || isSigned}>
+                        <Select value={form.payment_method || ''} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))} disabled={!editable}>
                           <SelectTrigger className="mt-1 h-10" data-testid="select-payment"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>{PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                         </Select>
@@ -314,16 +350,16 @@ const InvoiceDetail = () => {
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Carrier Pay</Label>
                         <Input type="number" step="0.01" value={form.carrier_pay || 0} onChange={updateNumField('carrier_pay')}
-                          disabled={!canEdit || isSigned} className="mt-1 h-10 text-lg font-bold text-blue-700 font-mono" data-testid="input-carrier-pay" />
+                          disabled={!editable} className="mt-1 h-10 text-lg font-bold text-blue-700 font-mono" data-testid="input-carrier-pay" />
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">COD to Collect</Label>
                         <Input type="number" step="0.01" value={form.cod_amount || 0} onChange={updateNumField('cod_amount')}
-                          disabled={!canEdit || isSigned} className="mt-1 h-10 text-lg font-bold text-amber-700 font-mono" />
+                          disabled={!editable} className="mt-1 h-10 text-lg font-bold text-amber-700 font-mono" />
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Shipping Type</Label>
-                        <Select value={form.shipping_type || 'standard'} onValueChange={v => setForm(f => ({ ...f, shipping_type: v }))} disabled={!canEdit || isSigned}>
+                        <Select value={form.shipping_type || 'standard'} onValueChange={v => setForm(f => ({ ...f, shipping_type: v }))} disabled={!editable}>
                           <SelectTrigger className="mt-1 h-10"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="standard">Standard Open</SelectItem>
@@ -334,7 +370,7 @@ const InvoiceDetail = () => {
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500 uppercase">Payment Method</Label>
-                        <Select value={form.payment_method || ''} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))} disabled={!canEdit || isSigned}>
+                        <Select value={form.payment_method || ''} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))} disabled={!editable}>
                           <SelectTrigger className="mt-1 h-10"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>{PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                         </Select>
@@ -349,7 +385,7 @@ const InvoiceDetail = () => {
             <div>
               <SectionTitle icon={FileText} title="Terms & Conditions" color="violet" />
               <Textarea value={form.terms || ''} onChange={(e) => setForm(f => ({ ...f, terms: e.target.value }))}
-                disabled={!canEdit || isSigned} rows={12}
+                disabled={!editable} rows={12}
                 className="text-xs leading-relaxed font-mono whitespace-pre-wrap bg-slate-50 border-slate-200" data-testid="terms-textarea" />
             </div>
 
@@ -357,7 +393,7 @@ const InvoiceDetail = () => {
             <div>
               <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Special Conditions / Notes</Label>
               <Textarea value={form.special_conditions || ''} onChange={(e) => setForm(f => ({ ...f, special_conditions: e.target.value }))}
-                disabled={!canEdit || isSigned} rows={3} placeholder="Enter any special conditions or instructions..."
+                disabled={!editable} rows={3} placeholder="Enter any special conditions or instructions..."
                 className="mt-1 text-sm bg-slate-50" data-testid="special-conditions" />
             </div>
 
@@ -380,7 +416,7 @@ const InvoiceDetail = () => {
               ) : (
                 <div className="space-y-3">
                   <Field label="Signer Name" value={form.signer_name || ''} onChange={updateField('signer_name')}
-                    disabled={isSigned} placeholder={isCustomer ? "Customer's full name" : "Driver / Carrier representative name"} />
+                    disabled={isSigned && !isSuperAdmin} placeholder={isCustomer ? "Customer's full name" : "Driver / Carrier representative name"} />
                   <div>
                     <Label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1 block">Signature</Label>
                     <SignaturePad
@@ -388,7 +424,7 @@ const InvoiceDetail = () => {
                       onSave={(data) => setForm(f => ({ ...f, signature_data: data }))}
                     />
                   </div>
-                  {canEdit && form.signer_name && form.signature_data && (
+                  {editable && form.signer_name && form.signature_data && (
                     <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSave} data-testid="sign-save-btn">
                       <CheckCircle className="w-4 h-4 mr-2" />Save & Sign
                     </Button>
@@ -399,8 +435,8 @@ const InvoiceDetail = () => {
 
             {/* Footer */}
             <div className="border-t border-slate-200 pt-4 mt-6 text-center print:mt-8">
-              <p className="text-xs text-slate-400">Breamway Auto Transport | Shumail Technologies LLC | www.breamway.com</p>
-              <p className="text-xs text-slate-400">USDOT# 4246498 | MC# 1622825</p>
+              <p className="text-xs text-slate-400">{form.company_name || 'Breamway Auto Transport'} | {form.company_subtitle || 'Shumail Technologies LLC'}</p>
+              <p className="text-xs text-slate-400">{form.company_dot || 'USDOT# 4246498 | MC# 1622825'}</p>
             </div>
           </div>
         </div>

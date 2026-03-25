@@ -121,31 +121,50 @@ const Chat = () => {
     markChatRead(activeChannel).catch(() => {});
   }, [activeChannel, fetchMessages]);
 
-  // SSE listener
+  // SSE listener with auto-reconnect
   useEffect(() => {
     if (!token) return;
-    const url = `${BACKEND}/api/notifications/stream?token=${token}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'chat_message' && data.message) {
-          const msg = data.message;
-          if (msg.channel === activeChannel) {
-            setMessages(prev => [...prev, msg]);
-            setTimeout(scrollToBottom, 100);
-            if (msg.sender_id !== user?.id) markChatRead(activeChannel).catch(() => {});
-          } else {
-            setChannels(prev => prev.map(ch =>
-              ch.id === msg.channel ? { ...ch, unread: (ch.unread || 0) + 1 } : ch
-            ));
+    let retryTimeout = null;
+    let es = null;
+
+    const connect = () => {
+      const url = `${BACKEND}/api/notifications/stream?token=${token}`;
+      es = new EventSource(url);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'chat_message' && data.message) {
+            const msg = data.message;
+            if (msg.channel === activeChannel) {
+              setMessages(prev => {
+                if (prev.some(m => m.id === msg.id)) return prev;
+                return [...prev, msg];
+              });
+              setTimeout(scrollToBottom, 50);
+              if (msg.sender_id !== user?.id) markChatRead(activeChannel).catch(() => {});
+            } else {
+              setChannels(prev => prev.map(ch =>
+                ch.id === msg.channel ? { ...ch, unread: (ch.unread || 0) + 1 } : ch
+              ));
+            }
           }
-        }
-      } catch { /* ignore */ }
+        } catch { /* ignore */ }
+      };
+
+      es.onerror = () => {
+        es.close();
+        retryTimeout = setTimeout(connect, 3000);
+      };
     };
-    es.onerror = () => es.close();
-    return () => es.close();
+
+    connect();
+
+    return () => {
+      if (es) es.close();
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [token, activeChannel, user?.id]);
 
   const handleSend = async () => {

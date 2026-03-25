@@ -390,6 +390,19 @@ class OrderUpdateInput(BaseModel):
     pickup_zip: Optional[str] = None
     delivery_zip: Optional[str] = None
     payment_method: Optional[str] = None
+    # Superadmin-editable fields
+    customer_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    agent_name: Optional[str] = None
+    vehicle_year: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    pickup_city: Optional[str] = None
+    pickup_state: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_state: Optional[str] = None
+    source: Optional[str] = None
 
 # --- Carrier ---
 
@@ -419,6 +432,11 @@ class InvoiceUpdateInput(BaseModel):
     notes: Optional[str] = None
     status: Optional[str] = None
     invoice_type: Optional[str] = None
+    # Header / Branding (superadmin customizable)
+    company_name: Optional[str] = None
+    company_subtitle: Optional[str] = None
+    company_dot: Optional[str] = None
+    document_title: Optional[str] = None
     # Customer info
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
@@ -1173,6 +1191,9 @@ async def update_invoice(invoice_id: str, data: InvoiceUpdateInput, current_user
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    # Admin cannot edit signed invoices, but superadmin can edit anything before signing
+    if existing.get("status") == "signed" and current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmin can modify signed invoices")
     update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
     update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
     if update_dict.get("status") == "paid" and existing.get("status") != "paid":
@@ -1271,6 +1292,11 @@ async def generate_invoice_from_order(order_id: str, invoice_type: str = "custom
         "order_number": order.get("order_number", ""),
         "quote_number": order.get("quote_number", ""),
         "invoice_type": invoice_type,
+        # Header / Branding (superadmin customizable)
+        "company_name": "Breamway Auto Transport",
+        "company_subtitle": "Shumail Technologies LLC",
+        "company_dot": "USDOT# 4246498 | MC# 1622825",
+        "document_title": "Customer Transport Agreement & Invoice" if invoice_type == "customer" else "Carrier Dispatch Agreement & Invoice",
         # Customer info
         "customer_name": order.get("customer_name", ""),
         "customer_email": order.get("email", ""),

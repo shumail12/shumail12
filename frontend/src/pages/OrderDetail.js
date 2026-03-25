@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getOrder, updateOrder, submitRevenueForm, getRevenueByOrder, generateInvoiceFromOrder } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 import { PricingEditor } from '../components/PricingEditor';
 import USARouteMap from '../components/USARouteMap';
 import TransportFacts from '../components/TransportFacts';
@@ -35,6 +36,7 @@ const DEFAULT_PRICING = {
 const OrderDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,7 +126,7 @@ const OrderDetail = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await updateOrder(id, {
+      const saveData = {
         carrier_name: form.carrier_name, carrier_phone: form.carrier_phone,
         carrier_mc: form.carrier_mc, driver_name: form.driver_name,
         driver_phone: form.driver_phone, pickup_date: form.pickup_date,
@@ -135,7 +137,19 @@ const OrderDetail = () => {
         pricing_enclosed: pricing.enclosed, estimated_distance: form.estimated_distance,
         pickup_zip: form.pickup_zip, delivery_zip: form.delivery_zip,
         payment_method: form.payment_method,
-      });
+      };
+      // Superadmin can edit customer/vehicle/location fields
+      if (user?.role === 'superadmin') {
+        Object.assign(saveData, {
+          customer_name: form.customer_name, phone: form.phone, email: form.email,
+          agent_name: form.agent_name,
+          vehicle_year: form.vehicle_year, vehicle_make: form.vehicle_make, vehicle_model: form.vehicle_model,
+          pickup_city: form.pickup_city, pickup_state: form.pickup_state,
+          delivery_city: form.delivery_city, delivery_state: form.delivery_state,
+          source: form.source,
+        });
+      }
+      const res = await updateOrder(id, saveData);
       setOrder(res.data);
       setForm(res.data);
       toast.success('Order updated');
@@ -200,19 +214,43 @@ const OrderDetail = () => {
 
           {/* Customer & Vehicle */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-900 mb-4">Customer & Vehicle</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-              <div><span className="text-slate-500 text-xs block">Customer</span><span className="font-medium">{order?.customer_name}</span></div>
-              <div><span className="text-slate-500 text-xs block">Phone</span><span className="font-medium">{order?.phone || '-'}</span></div>
-              <div><span className="text-slate-500 text-xs block">Email</span><span className="font-medium">{order?.email || '-'}</span></div>
-              <div><span className="text-slate-500 text-xs block">Vehicle</span>
-                <button onClick={() => vehicleSearch && window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(vehicleSearch)}`, '_blank')} className="font-medium text-blue-600 hover:underline flex items-center gap-1">
-                  {vehicleSearch || '-'} <ExternalLink className="w-3 h-3" />
-                </button>
-              </div>
-              <div><span className="text-slate-500 text-xs block">Pickup</span><span className="font-medium">{[order?.pickup_city, order?.pickup_state, order?.pickup_zip].filter(Boolean).join(', ')}</span></div>
-              <div><span className="text-slate-500 text-xs block">Delivery</span><span className="font-medium">{[order?.delivery_city, order?.delivery_state, order?.delivery_zip].filter(Boolean).join(', ')}</span></div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900">Customer & Vehicle</h3>
+              {user?.role === 'superadmin' && (
+                <span className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-full" data-testid="superadmin-edit-badge">Superadmin Edit</span>
+              )}
             </div>
+            {user?.role === 'superadmin' ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div><Label className="text-xs text-slate-500">Customer Name</Label><Input value={form.customer_name || ''} onChange={e => setForm(f => ({...f, customer_name: e.target.value}))} data-testid="input-customer-name" /></div>
+                <div><Label className="text-xs text-slate-500">Phone</Label><Input value={form.phone || ''} onChange={e => setForm(f => ({...f, phone: e.target.value}))} data-testid="input-phone" /></div>
+                <div><Label className="text-xs text-slate-500">Email</Label><Input value={form.email || ''} onChange={e => setForm(f => ({...f, email: e.target.value}))} data-testid="input-email" /></div>
+                <div><Label className="text-xs text-slate-500">Vehicle Year</Label><Input value={form.vehicle_year || ''} onChange={e => setForm(f => ({...f, vehicle_year: e.target.value}))} data-testid="input-vehicle-year" /></div>
+                <div><Label className="text-xs text-slate-500">Vehicle Make</Label><Input value={form.vehicle_make || ''} onChange={e => setForm(f => ({...f, vehicle_make: e.target.value}))} data-testid="input-vehicle-make" /></div>
+                <div><Label className="text-xs text-slate-500">Vehicle Model</Label><Input value={form.vehicle_model || ''} onChange={e => setForm(f => ({...f, vehicle_model: e.target.value}))} data-testid="input-vehicle-model" /></div>
+                <div><Label className="text-xs text-slate-500">Pickup City</Label><Input value={form.pickup_city || ''} onChange={e => setForm(f => ({...f, pickup_city: e.target.value}))} data-testid="input-pickup-city" /></div>
+                <div><Label className="text-xs text-slate-500">Pickup State</Label><Input value={form.pickup_state || ''} onChange={e => setForm(f => ({...f, pickup_state: e.target.value}))} data-testid="input-pickup-state" /></div>
+                <div><Label className="text-xs text-slate-500">Pickup Zip</Label><Input value={form.pickup_zip || ''} onChange={e => setForm(f => ({...f, pickup_zip: e.target.value}))} data-testid="input-pickup-zip" /></div>
+                <div><Label className="text-xs text-slate-500">Delivery City</Label><Input value={form.delivery_city || ''} onChange={e => setForm(f => ({...f, delivery_city: e.target.value}))} data-testid="input-delivery-city" /></div>
+                <div><Label className="text-xs text-slate-500">Delivery State</Label><Input value={form.delivery_state || ''} onChange={e => setForm(f => ({...f, delivery_state: e.target.value}))} data-testid="input-delivery-state" /></div>
+                <div><Label className="text-xs text-slate-500">Delivery Zip</Label><Input value={form.delivery_zip || ''} onChange={e => setForm(f => ({...f, delivery_zip: e.target.value}))} data-testid="input-delivery-zip" /></div>
+                <div><Label className="text-xs text-slate-500">Agent Name</Label><Input value={form.agent_name || ''} onChange={e => setForm(f => ({...f, agent_name: e.target.value}))} data-testid="input-agent-name" /></div>
+                <div><Label className="text-xs text-slate-500">Source</Label><Input value={form.source || ''} onChange={e => setForm(f => ({...f, source: e.target.value}))} data-testid="input-source" /></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                <div><span className="text-slate-500 text-xs block">Customer</span><span className="font-medium">{order?.customer_name}</span></div>
+                <div><span className="text-slate-500 text-xs block">Phone</span><span className="font-medium">{order?.phone || '-'}</span></div>
+                <div><span className="text-slate-500 text-xs block">Email</span><span className="font-medium">{order?.email || '-'}</span></div>
+                <div><span className="text-slate-500 text-xs block">Vehicle</span>
+                  <button onClick={() => vehicleSearch && window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(vehicleSearch)}`, '_blank')} className="font-medium text-blue-600 hover:underline flex items-center gap-1">
+                    {vehicleSearch || '-'} <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+                <div><span className="text-slate-500 text-xs block">Pickup</span><span className="font-medium">{[order?.pickup_city, order?.pickup_state, order?.pickup_zip].filter(Boolean).join(', ')}</span></div>
+                <div><span className="text-slate-500 text-xs block">Delivery</span><span className="font-medium">{[order?.delivery_city, order?.delivery_state, order?.delivery_zip].filter(Boolean).join(', ')}</span></div>
+              </div>
+            )}
           </div>
 
           {/* USA Route Map */}
