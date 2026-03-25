@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getLead, updateLead, convertLeadToQuote, createQuote, getLeadPricing, approveLead } from '../lib/api';
 import { PricingEditor } from '../components/PricingEditor';
+import USARouteMap from '../components/USARouteMap';
+import TransportFacts from '../components/TransportFacts';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { ArrowLeft, Save, ArrowRightCircle, Car, ExternalLink, DollarSign, CheckCircle, MapPin, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, ArrowRightCircle, Car, ExternalLink, DollarSign, CheckCircle, MapPin, RefreshCw, Map } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DEFAULT_PRICING = {
@@ -237,6 +239,48 @@ const LeadDetail = () => {
               </div>
             </div>
           </div>
+
+          {/* USA Route Map */}
+          {!isNew && (form.pickup_state || form.delivery_state) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5" data-testid="route-map-section">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center">
+                  <Map className="w-5 h-5 text-slate-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Transport Route</h3>
+                  <p className="text-xs text-slate-500">Visual route from pickup to delivery</p>
+                </div>
+              </div>
+              <USARouteMap
+                pickupState={form.pickup_state}
+                deliveryState={form.delivery_state}
+                pickupCity={form.pickup_city}
+                deliveryCity={form.delivery_city}
+              />
+            </div>
+          )}
+
+          {/* Transport Fun Facts */}
+          {!isNew && (form.pickup_state || form.delivery_state) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5" data-testid="transport-facts-section">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
+                  <span className="text-lg">&#x1f4cd;</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Route Intelligence</h3>
+                  <p className="text-xs text-slate-500">Weather, roads, and transportation facts for this route</p>
+                </div>
+              </div>
+              <TransportFacts
+                pickupState={form.pickup_state}
+                deliveryState={form.delivery_state}
+                pickupCity={form.pickup_city}
+                deliveryCity={form.delivery_city}
+              />
+            </div>
+          )}
 
           {/* Notes */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">

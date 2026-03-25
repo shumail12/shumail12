@@ -1,0 +1,116 @@
+{
+  "summary": "Comprehensive testing of new features for Auto Transport Brokerage CRM iteration 8. All 9 backend tests passed (100%). Frontend tests verified all new features: auto-calc pricing, USA route map, transport facts, zip codes, and approve-all-prices flow.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": {
+    "backend": [
+      "GET /api/leads/pricing/{id} - Returns pricing for all 3 types (standard, expedited, enclosed) with distance",
+      "GET /api/leads/pricing/{id} - Returns 404 for non-existent lead",
+      "POST /api/leads/{id}/approve - Saves all 3 pricing types and converts lead to quote",
+      "POST /api/leads/{id}/approve - Returns 400 for already quoted lead",
+      "POST /api/leads/{id}/approve - Returns 404 for non-existent lead",
+      "PUT /api/quotes/{id} - Saves pricing_standard, pricing_expedited, pricing_enclosed",
+      "PUT /api/orders/{id} - Saves pricing fields and zip codes",
+      "Distance calculation - LA to Houston returns ~1400-1800 miles",
+      "Test data cleanup successful"
+    ],
+    "frontend": [
+      "Lead detail: Pricing section shows all 3 shipping types (Standard, Expedited, Enclosed)",
+      "Lead detail: Auto-calculated total = deposit + carrier + mileage when fields change",
+      "Lead detail: Estimated distance displayed (1,782 miles for LA to Houston)",
+      "Lead detail: Mileage cost calculated per shipping type ($0.75/mi, $0.95/mi, $1/mi)",
+      "Lead detail: Recalculate button present and functional",
+      "Lead detail: Approve All Prices button present with correct message",
+      "Lead detail: Approve All Prices converts lead to quote and redirects",
+      "Lead detail: USA route map renders with all US states",
+      "Lead detail: Route line (animated dashed) between pickup (blue) and delivery (green) markers",
+      "Lead detail: Map legend shows pickup and delivery locations",
+      "Lead detail: Route Intelligence section with city facts (LA traffic, Houston Katy Freeway)",
+      "Lead detail: State facts grid with Weather, Transport, Roads for CA and TX",
+      "Lead detail: Zip code fields present for pickup and delivery",
+      "Quote detail: All 3 pricing cards editable (Standard, Expedited, Enclosed)",
+      "Quote detail: Zip code fields present",
+      "Quote detail: Estimated distance displayed",
+      "Order detail: All 3 pricing cards editable",
+      "Order detail: Dispatch & Carrier section with status, carrier info, driver info",
+      "Order detail: Pickup & Delivery dates editable"
+    ]
+  },
+  
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [
+    "PricingEditor component correctly implements auto-calc: total = deposit + carrier + (distance * rate)",
+    "USARouteMap uses SVG with state coordinates and animated route line between pickup/delivery",
+    "TransportFacts provides comprehensive state and city facts about weather, transport, and roads",
+    "LeadApproveInput model correctly accepts all 3 pricing types and estimated_distance",
+    "Backend correctly saves pricing_standard, pricing_expedited, pricing_enclosed on approve/update"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (all critical flows working)"
+  },
+  
+  "test_credentials": {
+    "username": "shumail.s",
+    "password": "HONDA@2026",
+    "role": "superadmin"
+  },
+  
+  "seed_data_creation": "Created test lead BR039832 (Test Approve Flow Customer, LA to Houston) for approve flow testing",
+  
+  "retest_needed": false,
+  
+  "should_main_agent_self_test": true,
+  
+  "context_for_next_testing_agent": "New features fully tested and working: 1) Auto-calc pricing (total = deposit + carrier + mileage), 2) USA route map with animated line between states, 3) Transport facts (city and state facts about weather, roads, transport), 4) Zip code fields in pickup/delivery, 5) All 3 shipping types editable in leads/quotes/orders, 6) Approve All Prices converts lead to quote with all pricing saved. Backend endpoints: GET /api/leads/pricing/{id}, POST /api/leads/{id}/approve, PUT /api/quotes/{id}, PUT /api/orders/{id}.",
+  
+  "features_verified": {
+    "auto_calc_pricing": {
+      "formula": "total = deposit_fee + carrier_fee + (distance * rate_per_mile)",
+      "rates": {
+        "standard": "$0.75/mi",
+        "expedited": "$0.95/mi",
+        "enclosed": "$1.00/mi"
+      },
+      "ui": "PricingEditor component with 3 cards, editable deposit/carrier, auto-calculated mileage and total"
+    },
+    "usa_route_map": {
+      "component": "USARouteMap.js",
+      "features": ["SVG map with all US states", "State abbreviation labels", "Animated dashed route line", "Blue pickup marker", "Green delivery marker", "Legend with location names"]
+    },
+    "transport_facts": {
+      "component": "TransportFacts.js",
+      "features": ["City-specific facts (LA, Houston, etc.)", "State facts grid (Weather, Transport, Roads)", "Pickup and Delivery state facts in 2-column layout"]
+    },
+    "zip_codes": {
+      "fields": ["pickup_zip", "delivery_zip"],
+      "pages": ["LeadDetail", "QuoteDetail", "OrderDetail"]
+    },
+    "approve_all_prices": {
+      "endpoint": "POST /api/leads/{id}/approve",
+      "input": "LeadApproveInput with pricing_standard, pricing_expedited, pricing_enclosed, estimated_distance",
+      "behavior": "Saves all 3 pricing types, sets status to 'quoted', redirects to quote page"
+    }
+  }
+}
