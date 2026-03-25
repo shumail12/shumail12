@@ -584,6 +584,15 @@ class RevenueFormInput(BaseModel):
     payment_method: str = "Zelle"
     notes: str = ""
 
+class RevenueUpdateInput(BaseModel):
+    deposit_amount: Optional[float] = None
+    total_price: Optional[float] = None
+    payment_method: Optional[str] = None
+    customer_name: Optional[str] = None
+    vehicle_info: Optional[str] = None
+    route: Optional[str] = None
+    notes: Optional[str] = None
+
 
 # ==================== AUTHENTICATION ====================
 
@@ -757,8 +766,11 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
     revenue_docs = await db.revenue_forms.find(user_rev_query, {"_id": 0, "deposit_amount": 1}).to_list(None)
     total_revenue = sum(d.get("deposit_amount", 0) for d in revenue_docs)
 
-    # User's own revenue for target tracking
-    my_rev_docs = await db.revenue_forms.find({"submitted_by_id": current_user.id}, {"_id": 0, "deposit_amount": 1}).to_list(None)
+    # User's own revenue for target tracking — CURRENT MONTH ONLY
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    my_month_query = {"submitted_by_id": current_user.id, "created_at": {"$gte": month_start}}
+    my_rev_docs = await db.revenue_forms.find(my_month_query, {"_id": 0, "deposit_amount": 1}).to_list(None)
     my_revenue = sum(d.get("deposit_amount", 0) for d in my_rev_docs)
 
     conversion_rate = round((total_orders / total_all_quotes * 100), 1) if total_all_quotes > 0 else 0
@@ -782,6 +794,7 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
         "total_revenue": total_revenue,
         "my_revenue": my_revenue,
         "revenue_target": target,
+        "revenue_month": now.strftime("%B %Y"),
         "pending_quotes": pending_quotes,
         "active_orders": active_orders,
         "delivered_orders": delivered_orders,
@@ -1590,9 +1603,25 @@ async def get_revenue_by_order(order_id: str, current_user: User = Depends(get_c
     return form
 
 @api_router.get("/revenue/admin/summary")
-async def get_revenue_admin_summary(current_user: User = Depends(require_superadmin)):
-    """Super admin: revenue per user, by payment method, totals."""
-    all_forms = await db.revenue_forms.find({}, {"_id": 0}).to_list(None)
+async def get_revenue_admin_summary(
+    month: Optional[str] = None,
+    current_user: User = Depends(require_superadmin)
+):
+    """Super admin: revenue per user, by payment method, totals. Optional month filter (YYYY-MM)."""
+    query = {}
+    if month:
+        try:
+            year, mon = month.split("-")
+            start = f"{year}-{mon}-01T00:00:00"
+            if int(mon) == 12:
+                end = f"{int(year)+1}-01-01T00:00:00"
+            else:
+                end = f"{year}-{int(mon)+1:02d}-01T00:00:00"
+            query["created_at"] = {"$gte": start, "$lt": end}
+        except (ValueError, IndexError):
+            pass
+
+    all_forms = await db.revenue_forms.find(query, {"_id": 0}).to_list(None)
     total_deposits = sum(f.get("deposit_amount", 0) for f in all_forms)
     # Per user
     by_user = {}
@@ -1615,7 +1644,71 @@ async def get_revenue_admin_summary(current_user: User = Depends(require_superad
         "total_forms": len(all_forms),
         "by_user": list(by_user.values()),
         "by_payment_method": list(by_method.values()),
+        "month_filter": month or "all",
     }
+
+@api_router.put("/revenue/{revenue_id}")
+async def update_revenue_form(revenue_id: str, data: RevenueUpdateInput, current_user: User = Depends(require_superadmin)):
+    """Superadmin: edit a revenue entry."""
+    existing = await db.revenue_forms.find_one({"id": revenue_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Revenue entry not found")
+    update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_dict["updated_by"] = current_user.full_name
+    await db.revenue_forms.update_one({"id": revenue_id}, {"$set": update_dict})
+    updated = await db.revenue_forms.find_one({"id": revenue_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/revenue/{revenue_id}")
+async def delete_revenue_form(revenue_id: str, current_user: User = Depends(require_superadmin)):
+    """Superadmin: delete a revenue entry."""
+    result = await db.revenue_forms.delete_one({"id": revenue_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Revenue entry not found")
+    return {"message": "Revenue entry deleted"}
+
+@api_router.get("/revenue/monthly-history")
+async def get_revenue_monthly_history(
+    user_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get month-by-month revenue history. Superadmin sees all users, others see own."""
+    is_admin = current_user.role in ("superadmin", "admin")
+    query = {}
+    if not is_admin:
+        query["submitted_by_id"] = current_user.id
+    elif user_id:
+        query["submitted_by_id"] = user_id
+
+    all_forms = await db.revenue_forms.find(query, {"_id": 0}).to_list(None)
+
+    # Group by month and by user
+    monthly = {}
+    for f in all_forms:
+        created = f.get("created_at", "")
+        if not created:
+            continue
+        month_key = created[:7]  # YYYY-MM
+        if month_key not in monthly:
+            monthly[month_key] = {"month": month_key, "total": 0, "count": 0, "users": {}}
+        monthly[month_key]["total"] += f.get("deposit_amount", 0)
+        monthly[month_key]["count"] += 1
+
+        uid = f.get("submitted_by", "Unknown")
+        if uid not in monthly[month_key]["users"]:
+            monthly[month_key]["users"][uid] = {"name": uid, "user_id": f.get("submitted_by_id", ""), "total": 0, "count": 0}
+        monthly[month_key]["users"][uid]["total"] += f.get("deposit_amount", 0)
+        monthly[month_key]["users"][uid]["count"] += 1
+
+    # Convert users dict to list and sort by month descending
+    result = []
+    for mk in sorted(monthly.keys(), reverse=True):
+        m = monthly[mk]
+        m["users"] = list(m["users"].values())
+        result.append(m)
+
+    return {"history": result}
 
 
 # ==================== LEAD INTAKE (VENDOR API) ====================

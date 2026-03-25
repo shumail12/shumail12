@@ -22,7 +22,7 @@ const StatCard = ({ title, value, icon: Icon, color = 'blue', sub }) => (
   </div>
 );
 
-const RevenueTarget = ({ current, target }) => {
+const RevenueTarget = ({ current, target, month }) => {
   const pct = Math.min(100, (current / target) * 100);
   const nextLevel = target === 1500 ? '$3,000' : target === 3000 ? '$5,000' : 'MAX';
   const levelLabel = target === 1500 ? 'Level 1' : target === 3000 ? 'Level 2' : 'Level 3';
@@ -37,7 +37,7 @@ const RevenueTarget = ({ current, target }) => {
           </div>
           <div>
             <h3 className="font-semibold text-slate-900 text-sm">My Revenue Target</h3>
-            <p className="text-xs text-slate-500">{levelLabel} — Next: {nextLevel}</p>
+            <p className="text-xs text-slate-500">{month || 'This Month'} — {levelLabel} — Next: {nextLevel}</p>
           </div>
         </div>
         <div className="text-right">
@@ -102,7 +102,7 @@ const Dashboard = () => {
       </Header>
       <div className="p-6 space-y-6" data-testid="dashboard-page">
         {/* Revenue Target */}
-        <RevenueTarget current={s.my_revenue || 0} target={s.revenue_target || 1500} />
+        <RevenueTarget current={s.my_revenue || 0} target={s.revenue_target || 1500} month={s.revenue_month} />
 
         {/* Stat Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

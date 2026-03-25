@@ -113,7 +113,10 @@ export const deleteAgreement = (id) => api.delete(`/agreements/${id}`);
 export const submitRevenueForm = (data) => api.post('/revenue', data);
 export const getRevenueForms = (params = {}) => api.get('/revenue', { params });
 export const getRevenueByOrder = (orderId) => api.get(`/revenue/by-order/${orderId}`);
-export const getRevenueAdminSummary = () => api.get('/revenue/admin/summary');
+export const getRevenueAdminSummary = (month) => api.get('/revenue/admin/summary', { params: month ? { month } : {} });
+export const updateRevenueForm = (id, data) => api.put(`/revenue/${id}`, data);
+export const deleteRevenueForm = (id) => api.delete(`/revenue/${id}`);
+export const getRevenueMonthlyHistory = (params = {}) => api.get('/revenue/monthly-history', { params });
 
 // Generate Invoice from Order
 export const generateInvoiceFromOrder = (orderId, invoiceType = 'customer') =>
