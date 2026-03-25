@@ -1,67 +1,71 @@
-# Breamway Auto Transport CRM - PRD
+# Breamway Auto Transport CRM - Product Requirements Document
 
 ## Original Problem Statement
-Build a full-featured auto transport CRM platform for Breamway Auto Transport (www.breamway.com). Core features: Lead→Quote→Order workflow, dispatch, carrier management, AI pricing, invoicing, agreements, SMS notifications, and real-time lead vendor integration.
+CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Auto Transport). Core features: lead processing, dispatch, quotes, tracking, invoicing, reporting, SMS text notifications.
 
-## Tech Stack
-- Frontend: React, Tailwind CSS, Shadcn UI, Sonner (toasts)
-- Backend: FastAPI, MongoDB (Motor Async), SSE (Server-Sent Events), direct bcrypt
-- Auth: JWT-based, direct bcrypt (no passlib)
-- Real-time: SSE for push notifications
+## Core Architecture
+- **Frontend**: React + Tailwind CSS + Shadcn UI
+- **Backend**: FastAPI + MongoDB (Motor Async)
+- **Auth**: JWT-based (bcrypt), Super Admin role
+- **Real-time**: SSE for notifications and chat
+
+## Credentials
+- Superadmin: `shumail.s` / `HONDA@2026`, Security Answer: `Shark`
 
 ## What's Been Implemented
 
-### Phase 1 — Core CRM (COMPLETE)
-- [x] 39,793+ quotes imported with BR format IDs (BR000001–BR039792+)
-- [x] Unified data model — quotes embed customer, vehicle, addresses directly
-- [x] Quote ID: BR000001, Order ID: ORD000001 (auto-incrementing)
-- [x] Lead → Quote → Order workflow with Convert buttons
-- [x] 3 Shipping Types: Standard, Expedited, Enclosed
-- [x] Quick View modal, Vehicle View (Google Images), search & filters
-- [x] Enhanced Dashboard with stats, conversion rates, revenue
-- [x] Pagination (100/page), full detail pages, new quote creation
+### Phase 1 - Core CRM (DONE)
+- JWT Auth with self-healing bcrypt
+- Dashboard with stats
+- Leads → Quotes → Orders workflow
+- Carriers management
+- Invoice system (customer & driver)
+- User management (superadmin only)
+- Company settings
+- Auto-import of ~39.8k legacy records from CSV
 
-### Real-Time Lead Integration (COMPLETE - 2026-03-23)
-- [x] **Vendor Lead Intake API**: POST /api/leads/incoming (API key auth)
-- [x] **SSE Real-Time Notifications**: All logged-in users notified instantly
-- [x] **Popup Notifications**: Toast with customer name, vehicle, route, quick actions
-- [x] **Sound Alert**: Audio plays on new lead arrival
-- [x] **Notification Bell**: In header with unread badge count
-- [x] **Notification Panel**: Click bell → see all notifications with View/Quote buttons
-- [x] **Mark as Read**: Individual + bulk "Mark all read"
-- [x] **Quick Actions**: "View Lead" and "Start Quote" from popup & panel
-- [x] **Auto Distribution**: All leads visible to all users simultaneously
-- [x] **API Key Management**: Superadmin can view/regenerate vendor API key
-- [x] **Lead Posting Specs**: GET /api/leads/specs returns full vendor documentation
+### Phase 2 - Real-time & Vendor Integration (DONE)
+- SSE-based real-time notification system
+- Notification bell with popups
+- Vendor Lead Intake API (POST /api/leads/incoming with X-API-Key)
+- Public API documentation endpoint (/api/leads/specs)
 
-### Auth & Security (COMPLETE)
-- [x] JWT Auth, auto-heal superadmin on startup
-- [x] Forgot Password with security question (super admin only)
-- [x] "Made with Emergent" badge removed
-
-## Vendor Lead Posting API
-- **Endpoint**: POST /api/leads/incoming
-- **Auth Header**: X-API-Key: [vendor_api_key]
-- **Fields**: name (required), phone, email, vehicle {year, make, model}, pickup, delivery, date
-
-## Superadmin Credentials
-- Username: shumail.s | Password: HONDA@2026
-- Security Q/A: "Who is your work?" → "Shark"
+### Phase 3 - Chat, Admin Panel, Agreements (DONE - March 25, 2026)
+- **Internal Chat System**: 1-on-1 DM + All Team group chat with SSE real-time messaging
+- **Admin Control Panel**: API key management, lead distribution rules, lead sources analytics, API activity logs
+- **Agreement/Contract System**: Create from orders, digital signature pad (canvas), public signing page, status flow (draft→sent→signed/void), terms & conditions template
 
 ## Prioritized Backlog
 
-### Phase 2 — AI & Smart Features (P1)
-- [ ] AI Pricing Engine (distance + vehicle + shipping type)
-- [ ] Distance calculation between pickup/delivery
-- [ ] Auto Dealers module with CSV upload
+### P1 - Upcoming
+- AI Pricing Engine (distance-based using Google Maps API)
+- Customer & Driver Invoice system (Breamway branded)
+- Auto Dealers module with CSV upload
 
-### Phase 3 — Invoicing & Agreements (P1)
-- [ ] Customer & Driver Invoice system (Breamway branded)
-- [ ] Agreement/Contract with digital signature
-- [ ] Terms & Conditions, auto-generate invoices
+### P2 - Future
+- Automated email follow-up system
+- Twilio SMS Notifications (requires user Twilio API credentials)
+- Invoice payment update bug fix
 
-### Phase 4 — Automation (P2)
-- [ ] Automated email follow-ups
-- [ ] Email sending from agent's email
-- [ ] AI Invoice automation
-- [ ] Twilio SMS Notifications
+### P3 - Deferred
+- Central Dispatch API Integration (deferred by user)
+
+## Key API Endpoints
+- `POST /api/auth/login` - Login
+- `GET /api/leads` - List leads
+- `POST /api/leads/incoming` - Vendor lead intake (X-API-Key auth)
+- `GET /api/quotes` - List quotes
+- `POST /api/quotes/{id}/convert-to-order` - Convert quote to order
+- `GET /api/orders` - List orders
+- `POST /api/chat/send` - Send chat message
+- `GET /api/chat/channels` - Get chat channels
+- `GET /api/agreements` - List agreements
+- `POST /api/agreements` - Create agreement
+- `POST /api/agreements/{id}/sign` - Sign agreement
+- `GET /api/agreements/public/{id}` - Public agreement view
+- `POST /api/agreements/public/{id}/sign` - Public signing
+- `GET /api/admin/distribution` - Lead distribution rules
+- `GET /api/notifications/stream` - SSE stream
+
+## DB Collections
+- users, quotes, orders, carriers, invoices, notifications, chat_messages, agreements, distribution_rules, api_logs, settings, company_settings, counters
