@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta
 
 class CRMAPITester:
-    def __init__(self, base_url="https://transport-ops-suite.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://quote-flow-30.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
