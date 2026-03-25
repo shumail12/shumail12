@@ -30,6 +30,8 @@ export const getLeads = (params = {}) => api.get('/leads', { params });
 export const getLead = (id) => api.get(`/leads/${id}`);
 export const updateLead = (id, data) => api.put(`/leads/${id}`, data);
 export const convertLeadToQuote = (id) => api.post(`/leads/${id}/convert-to-quote`);
+export const getLeadPricing = (id) => api.get(`/leads/pricing/${id}`);
+export const approveLead = (id, data) => api.post(`/leads/${id}/approve`, data);
 
 // Quotes (main entity — replaces leads)
 export const getQuotes = (params = {}) => api.get('/quotes', { params });
@@ -75,6 +77,14 @@ export const getChatChannels = () => api.get('/chat/channels');
 export const getChatMessages = (channel, limit = 100) => api.get('/chat/messages', { params: { channel, limit } });
 export const sendChatMessage = (data) => api.post('/chat/send', data);
 export const markChatRead = (channel) => api.post('/chat/read', null, { params: { channel } });
+export const uploadChatFile = (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post('/chat/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const createChatGroup = (data) => api.post('/chat/groups', data);
+export const getChatGroups = () => api.get('/chat/groups');
+export const searchChatUsers = (q = '') => api.get('/chat/users/search', { params: { q } });
 
 // Admin - API Management
 export const getVendorApiKey = () => api.get('/leads/api-key');

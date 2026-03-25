@@ -1,6 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request, Header as FastAPIHeader
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request, Header as FastAPIHeader, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9,6 +9,7 @@ import logging
 import asyncio
 import json
 import secrets
+import base64
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -18,6 +19,7 @@ import bcrypt
 from jose import JWTError, jwt
 import time
 from collections import defaultdict
+from distance_calc import estimate_distance, calculate_pricing
 
 
 ROOT_DIR = Path(__file__).parent
@@ -335,14 +337,20 @@ class QuoteUpdateInput(BaseModel):
     pickup_address: Optional[str] = None
     pickup_city: Optional[str] = None
     pickup_state: Optional[str] = None
+    pickup_zip: Optional[str] = None
     delivery_address: Optional[str] = None
     delivery_city: Optional[str] = None
     delivery_state: Optional[str] = None
+    delivery_zip: Optional[str] = None
     pickup_date: Optional[str] = None
     shipping_type: Optional[str] = None
     price: Optional[float] = None
     deposit_fee: Optional[float] = None
     carrier_fee: Optional[float] = None
+    pricing_standard: Optional[dict] = None
+    pricing_expedited: Optional[dict] = None
+    pricing_enclosed: Optional[dict] = None
+    estimated_distance: Optional[int] = None
     source: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
@@ -371,6 +379,16 @@ class OrderUpdateInput(BaseModel):
     delivery_date: Optional[str] = None
     dispatch_notes: Optional[str] = None
     status: Optional[str] = None
+    price: Optional[float] = None
+    deposit_fee: Optional[float] = None
+    carrier_fee: Optional[float] = None
+    shipping_type: Optional[str] = None
+    pricing_standard: Optional[dict] = None
+    pricing_expedited: Optional[dict] = None
+    pricing_enclosed: Optional[dict] = None
+    estimated_distance: Optional[int] = None
+    pickup_zip: Optional[str] = None
+    delivery_zip: Optional[str] = None
 
 # --- Carrier ---
 
@@ -439,7 +457,14 @@ class VendorLeadInput(BaseModel):
 class ChatMessageInput(BaseModel):
     receiver_id: Optional[str] = None  # null = group chat
     channel: str = "all-team"  # 'all-team' or 'dm-{user1}-{user2}'
-    text: str
+    text: str = ""
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
+    file_type: Optional[str] = None  # image, file, link
+
+class ChatGroupCreateInput(BaseModel):
+    name: str
+    member_ids: List[str]
 
 # --- Agreement/Contract ---
 
@@ -686,6 +711,60 @@ async def regenerate_vendor_api_key(current_user: User = Depends(require_superad
     await db.settings.update_one({"_id": "vendor_api_key"}, {"$set": {"key": new_key}})
     return {"api_key": new_key}
 
+@api_router.get("/leads/pricing/{lead_id}")
+async def get_lead_pricing(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Get suggested pricing for a lead based on pickup/delivery distance."""
+    lead = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    pickup_city = lead.get("pickup_city", "")
+    pickup_state = lead.get("pickup_state", "")
+    delivery_city = lead.get("delivery_city", "")
+    delivery_state = lead.get("delivery_state", "")
+    distance = estimate_distance(pickup_city, pickup_state, delivery_city, delivery_state)
+    if not distance:
+        return {"distance_miles": None, "pricing": None, "message": "Could not estimate distance for the given cities."}
+    pricing = calculate_pricing(distance)
+    return {"distance_miles": distance, "pricing": pricing}
+
+class LeadApproveInput(BaseModel):
+    pricing_standard: dict  # {deposit_fee, carrier_fee, total_price}
+    pricing_expedited: dict
+    pricing_enclosed: dict
+    estimated_distance: Optional[int] = None
+
+@api_router.post("/leads/{lead_id}/approve")
+async def approve_lead(
+    lead_id: str,
+    data: LeadApproveInput,
+    current_user: User = Depends(get_current_user)
+):
+    """Approve a lead with ALL pricing types and convert to quote."""
+    lead = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if lead.get("status") != "lead":
+        raise HTTPException(status_code=400, detail="This record is already a quote or order")
+    # Use standard as the default/primary price
+    std = data.pricing_standard
+    update_data = {
+        "status": "quoted",
+        "price": std.get("total_price", 0),
+        "deposit_fee": std.get("deposit_fee", 150),
+        "carrier_fee": std.get("carrier_fee", 60),
+        "shipping_type": "standard",
+        "pricing_standard": data.pricing_standard,
+        "pricing_expedited": data.pricing_expedited,
+        "pricing_enclosed": data.pricing_enclosed,
+        "estimated_distance": data.estimated_distance,
+        "approved_by": current_user.full_name,
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.quotes.update_one({"id": lead_id}, {"$set": update_data})
+    updated = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
+    return updated
+
 @api_router.get("/leads")
 async def get_leads(
     skip: int = 0, limit: int = 100,
@@ -844,13 +923,19 @@ async def convert_quote_to_order(quote_id: str, current_user: User = Depends(get
         "pickup_address": quote.get("pickup_address", ""),
         "pickup_city": quote.get("pickup_city", ""),
         "pickup_state": quote.get("pickup_state", ""),
+        "pickup_zip": quote.get("pickup_zip", ""),
         "delivery_address": quote.get("delivery_address", ""),
         "delivery_city": quote.get("delivery_city", ""),
         "delivery_state": quote.get("delivery_state", ""),
+        "delivery_zip": quote.get("delivery_zip", ""),
         "shipping_type": quote.get("shipping_type", "standard"),
         "price": quote.get("price", 0),
         "deposit_fee": quote.get("deposit_fee", 150),
         "carrier_fee": quote.get("carrier_fee", 0),
+        "pricing_standard": quote.get("pricing_standard"),
+        "pricing_expedited": quote.get("pricing_expedited"),
+        "pricing_enclosed": quote.get("pricing_enclosed"),
+        "estimated_distance": quote.get("estimated_distance"),
         "carrier_name": "",
         "carrier_phone": "",
         "carrier_mc": "",
@@ -1394,6 +1479,81 @@ async def delete_distribution_rule(
 
 # ==================== CHAT SYSTEM ====================
 
+# Ensure uploads directory exists
+UPLOAD_DIR = Path("/app/backend/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@api_router.post("/chat/upload")
+async def upload_chat_file(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a file for chat (images, PDFs, small files). Max 10MB."""
+    max_size = 10 * 1024 * 1024  # 10MB
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(status_code=400, detail="File too large. Max 10MB.")
+    file_id = str(uuid.uuid4())
+    ext = Path(file.filename or "file").suffix
+    stored_name = f"{file_id}{ext}"
+    file_path = UPLOAD_DIR / stored_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    file_url = f"/api/chat/files/{stored_name}"
+    # Determine file type
+    content_type = file.content_type or ""
+    if content_type.startswith("image/"):
+        file_type = "image"
+    else:
+        file_type = "file"
+    return {"file_url": file_url, "file_name": file.filename, "file_type": file_type}
+
+@api_router.get("/chat/files/{filename}")
+async def serve_chat_file(filename: str):
+    """Serve uploaded chat files."""
+    file_path = UPLOAD_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(str(file_path))
+
+@api_router.post("/chat/groups")
+async def create_chat_group(data: ChatGroupCreateInput, current_user: User = Depends(get_current_user)):
+    """Create a custom chat group."""
+    group_id = f"group-{str(uuid.uuid4())[:8]}"
+    # Ensure creator is in member list
+    member_ids = list(set(data.member_ids + [current_user.id]))
+    group_doc = {
+        "id": group_id,
+        "name": data.name,
+        "type": "group",
+        "member_ids": member_ids,
+        "created_by": current_user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.chat_groups.insert_one(group_doc)
+    group_doc.pop("_id", None)
+    return group_doc
+
+@api_router.get("/chat/groups")
+async def get_chat_groups(current_user: User = Depends(get_current_user)):
+    """Get all chat groups the user is a member of."""
+    groups = await db.chat_groups.find(
+        {"member_ids": current_user.id}, {"_id": 0}
+    ).to_list(None)
+    return groups
+
+@api_router.get("/chat/users/search")
+async def search_chat_users(q: str = "", current_user: User = Depends(get_current_user)):
+    """Search users for DM or group creation."""
+    query = {"is_active": True, "id": {"$ne": current_user.id}}
+    if q:
+        query["$or"] = [
+            {"full_name": {"$regex": q, "$options": "i"}},
+            {"username": {"$regex": q, "$options": "i"}},
+        ]
+    users = await db.users.find(query, {"_id": 0, "password": 0}).to_list(50)
+    return [{"id": u["id"], "full_name": u.get("full_name", u.get("username", "")), "username": u.get("username", ""), "role": u.get("role", "")} for u in users]
+
 @api_router.post("/chat/send")
 async def send_message(msg: ChatMessageInput, current_user: User = Depends(get_current_user)):
     doc = {
@@ -1403,6 +1563,9 @@ async def send_message(msg: ChatMessageInput, current_user: User = Depends(get_c
         "receiver_id": msg.receiver_id,
         "channel": msg.channel,
         "text": msg.text,
+        "file_name": msg.file_name,
+        "file_url": msg.file_url,
+        "file_type": msg.file_type,
         "is_read": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -1424,6 +1587,11 @@ async def get_chat_messages(
 async def get_chat_channels(current_user: User = Depends(get_current_user)):
     users = await db.users.find({"is_active": True}, {"_id": 0, "id": 1, "full_name": 1, "role": 1, "username": 1}).to_list(None)
     channels = [{"id": "all-team", "name": "All Team", "type": "group"}]
+    # Add custom groups
+    custom_groups = await db.chat_groups.find({"member_ids": current_user.id}, {"_id": 0}).to_list(None)
+    for g in custom_groups:
+        channels.append({"id": g["id"], "name": g["name"], "type": "group", "is_custom": True, "member_ids": g.get("member_ids", [])})
+    # Add DM channels
     for u in users:
         if u["id"] != current_user.id:
             dm_id = "-".join(sorted([current_user.id, u["id"]]))

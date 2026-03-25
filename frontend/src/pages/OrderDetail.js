@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getOrder, updateOrder } from '../lib/api';
+import { PricingEditor } from '../components/PricingEditor';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -17,6 +18,12 @@ const statusOptions = [
   { value: 'delivered', label: 'Delivered' },
 ];
 
+const DEFAULT_PRICING = {
+  standard: { deposit_fee: 150, carrier_fee: 60, total_price: 210 },
+  expedited: { deposit_fee: 175, carrier_fee: 70, total_price: 245 },
+  enclosed: { deposit_fee: 200, carrier_fee: 85, total_price: 285 },
+};
+
 const OrderDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -24,6 +31,7 @@ const OrderDetail = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({});
+  const [pricing, setPricing] = useState({ ...DEFAULT_PRICING });
 
   useEffect(() => {
     const fetch = async () => {
@@ -31,11 +39,28 @@ const OrderDetail = () => {
         const res = await getOrder(id);
         setOrder(res.data);
         setForm(res.data);
+        setPricing({
+          standard: res.data.pricing_standard || DEFAULT_PRICING.standard,
+          expedited: res.data.pricing_expedited || DEFAULT_PRICING.expedited,
+          enclosed: res.data.pricing_enclosed || DEFAULT_PRICING.enclosed,
+        });
       } catch { toast.error('Failed to load order'); navigate('/orders'); }
       finally { setLoading(false); }
     };
     fetch();
   }, [id, navigate]);
+
+  const handlePricingChange = (updated) => {
+    setPricing(updated);
+    if (updated.standard) {
+      setForm(f => ({
+        ...f,
+        price: updated.standard.total_price,
+        deposit_fee: updated.standard.deposit_fee,
+        carrier_fee: updated.standard.carrier_fee,
+      }));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -50,6 +75,16 @@ const OrderDetail = () => {
         delivery_date: form.delivery_date,
         dispatch_notes: form.dispatch_notes,
         status: form.status,
+        price: form.price,
+        deposit_fee: form.deposit_fee,
+        carrier_fee: form.carrier_fee,
+        shipping_type: form.shipping_type,
+        pricing_standard: pricing.standard,
+        pricing_expedited: pricing.expedited,
+        pricing_enclosed: pricing.enclosed,
+        estimated_distance: form.estimated_distance,
+        pickup_zip: form.pickup_zip,
+        delivery_zip: form.delivery_zip,
       });
       setOrder(res.data);
       setForm(res.data);
@@ -81,7 +116,7 @@ const OrderDetail = () => {
               <div className="bg-slate-50 rounded-lg p-3"><span className="text-slate-500 block text-xs">Order #</span><span className="font-mono font-bold text-emerald-600">{order?.order_number}</span></div>
               <div className="bg-slate-50 rounded-lg p-3"><span className="text-slate-500 block text-xs">Quote #</span><span className="font-mono font-bold text-blue-600">{order?.quote_number}</span></div>
               <div className="bg-slate-50 rounded-lg p-3"><span className="text-slate-500 block text-xs">Agent</span><span className="font-medium">{order?.agent_name || '-'}</span></div>
-              <div className="bg-slate-50 rounded-lg p-3"><span className="text-slate-500 block text-xs">Price</span><span className="font-bold text-emerald-600">${order?.price?.toLocaleString()}</span></div>
+              <div className="bg-slate-50 rounded-lg p-3"><span className="text-slate-500 block text-xs">Primary Price</span><span className="font-bold text-emerald-600">${(form.price || 0).toLocaleString()}</span></div>
             </div>
           </div>
 
@@ -98,9 +133,25 @@ const OrderDetail = () => {
                   {vehicleSearch || '-'} <ExternalLink className="w-3 h-3" />
                 </button>
               </div>
-              <div><span className="text-slate-500 text-xs block">Pickup Location</span><span className="font-medium">{[order?.pickup_city, order?.pickup_state].filter(Boolean).join(', ')}</span></div>
-              <div><span className="text-slate-500 text-xs block">Delivery Location</span><span className="font-medium">{[order?.delivery_city, order?.delivery_state].filter(Boolean).join(', ')}</span></div>
+              <div>
+                <span className="text-slate-500 text-xs block">Pickup</span>
+                <span className="font-medium">{[order?.pickup_city, order?.pickup_state, order?.pickup_zip].filter(Boolean).join(', ')}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 text-xs block">Delivery</span>
+                <span className="font-medium">{[order?.delivery_city, order?.delivery_state, order?.delivery_zip].filter(Boolean).join(', ')}</span>
+              </div>
             </div>
+          </div>
+
+          {/* Pricing - All 3 Types Editable */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-900 mb-4">Pricing — All Shipping Types</h3>
+            <PricingEditor
+              pricing={pricing}
+              distance={form.estimated_distance || order?.estimated_distance}
+              onChange={handlePricingChange}
+            />
           </div>
 
           {/* Dispatch & Carrier (editable) */}
@@ -126,14 +177,8 @@ const OrderDetail = () => {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="font-semibold text-slate-900 mb-4">Pickup & Delivery Dates</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Pickup Date</Label>
-                <Input type="date" value={form.pickup_date || ''} onChange={e => setForm(f => ({...f, pickup_date: e.target.value}))} data-testid="input-pickup-date" />
-              </div>
-              <div>
-                <Label>Delivery Date</Label>
-                <Input type="date" value={form.delivery_date || ''} onChange={e => setForm(f => ({...f, delivery_date: e.target.value}))} data-testid="input-delivery-date" />
-              </div>
+              <div><Label>Pickup Date</Label><Input type="date" value={form.pickup_date || ''} onChange={e => setForm(f => ({...f, pickup_date: e.target.value}))} data-testid="input-pickup-date" /></div>
+              <div><Label>Delivery Date</Label><Input type="date" value={form.delivery_date || ''} onChange={e => setForm(f => ({...f, delivery_date: e.target.value}))} data-testid="input-delivery-date" /></div>
             </div>
           </div>
 

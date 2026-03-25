@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Header } from '../components/Layout';
 import { getQuote, updateQuote, convertQuoteToOrder } from '../lib/api';
+import { PricingEditor } from '../components/PricingEditor';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -9,13 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ArrowLeft, Save, ArrowRightCircle, Car, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
-const shippingOptions = [
-  { value: 'standard', label: 'Standard Shipping (5-7 days)' },
-  { value: 'expedited', label: 'Expedited Shipping (48 hours)' },
-  { value: 'enclosed', label: 'Enclosed Shipping (ASAP Pickup)' },
-];
-
 const statusOptions = ['lead', 'quoted', 'order', 'dispatched', 'delivered', 'cancelled'];
+
+const DEFAULT_PRICING = {
+  standard: { deposit_fee: 150, carrier_fee: 60, total_price: 210 },
+  expedited: { deposit_fee: 175, carrier_fee: 70, total_price: 245 },
+  enclosed: { deposit_fee: 200, carrier_fee: 85, total_price: 285 },
+};
 
 const QuoteDetail = () => {
   const { id } = useParams();
@@ -24,12 +25,14 @@ const QuoteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({});
+  const [pricing, setPricing] = useState({ ...DEFAULT_PRICING });
   const isNew = !id || id === 'new';
 
   useEffect(() => {
     if (isNew) {
       setForm({ customer_name: '', phone: '', email: '', agent_name: '', vehicle_year: '', vehicle_make: '', vehicle_model: '',
-        pickup_city: '', pickup_state: '', delivery_city: '', delivery_state: '', pickup_address: '', delivery_address: '',
+        pickup_city: '', pickup_state: '', pickup_zip: '', delivery_city: '', delivery_state: '', delivery_zip: '',
+        pickup_address: '', delivery_address: '',
         shipping_type: 'standard', price: 0, deposit_fee: 150, carrier_fee: 0, status: 'lead', notes: '', source: '' });
       setLoading(false);
       return;
@@ -39,22 +42,46 @@ const QuoteDetail = () => {
         const res = await getQuote(id);
         setQuote(res.data);
         setForm(res.data);
+        setPricing({
+          standard: res.data.pricing_standard || DEFAULT_PRICING.standard,
+          expedited: res.data.pricing_expedited || DEFAULT_PRICING.expedited,
+          enclosed: res.data.pricing_enclosed || DEFAULT_PRICING.enclosed,
+        });
       } catch { toast.error('Failed to load quote'); navigate('/quotes'); }
       finally { setLoading(false); }
     };
     fetch();
   }, [id, isNew, navigate]);
 
+  const handlePricingChange = (updated) => {
+    setPricing(updated);
+    // Also update the primary price to standard
+    if (updated.standard) {
+      setForm(f => ({
+        ...f,
+        price: updated.standard.total_price,
+        deposit_fee: updated.standard.deposit_fee,
+        carrier_fee: updated.standard.carrier_fee,
+      }));
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
+      const saveData = {
+        ...form,
+        pricing_standard: pricing.standard,
+        pricing_expedited: pricing.expedited,
+        pricing_enclosed: pricing.enclosed,
+      };
       if (isNew) {
         const { createQuote } = await import('../lib/api');
-        const res = await createQuote(form);
+        const res = await createQuote(saveData);
         toast.success(`Quote ${res.data.quote_number} created!`);
         navigate(`/quotes/${res.data.id}`);
       } else {
-        const res = await updateQuote(id, form);
+        const res = await updateQuote(id, saveData);
         setQuote(res.data);
         setForm(res.data);
         toast.success('Quote updated');
@@ -128,42 +155,37 @@ const QuoteDetail = () => {
             </div>
           </div>
 
-          {/* Addresses */}
+          {/* Addresses with Zip */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h3 className="font-semibold text-slate-900 mb-4">Pickup & Delivery</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-3">
                 <h4 className="text-sm font-medium text-blue-600">Pickup</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div><Label>City</Label><Input value={form.pickup_city || ''} onChange={e => setForm(f => ({...f, pickup_city: e.target.value}))} data-testid="input-pickup-city" /></div>
                   <div><Label>State</Label><Input value={form.pickup_state || ''} onChange={e => setForm(f => ({...f, pickup_state: e.target.value}))} data-testid="input-pickup-state" /></div>
+                  <div><Label>Zip Code</Label><Input value={form.pickup_zip || ''} onChange={e => setForm(f => ({...f, pickup_zip: e.target.value}))} placeholder="e.g. 90001" data-testid="input-pickup-zip" /></div>
                 </div>
               </div>
               <div className="space-y-3">
                 <h4 className="text-sm font-medium text-emerald-600">Delivery</h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div><Label>City</Label><Input value={form.delivery_city || ''} onChange={e => setForm(f => ({...f, delivery_city: e.target.value}))} data-testid="input-delivery-city" /></div>
                   <div><Label>State</Label><Input value={form.delivery_state || ''} onChange={e => setForm(f => ({...f, delivery_state: e.target.value}))} data-testid="input-delivery-state" /></div>
+                  <div><Label>Zip Code</Label><Input value={form.delivery_zip || ''} onChange={e => setForm(f => ({...f, delivery_zip: e.target.value}))} placeholder="e.g. 77001" data-testid="input-delivery-zip" /></div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Pricing & Shipping */}
+          {/* Pricing - All 3 Types Editable */}
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-900 mb-4">Pricing & Shipping</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label>Shipping Type</Label>
-                <Select value={form.shipping_type || 'standard'} onValueChange={v => setForm(f => ({...f, shipping_type: v}))}>
-                  <SelectTrigger data-testid="select-shipping"><SelectValue /></SelectTrigger>
-                  <SelectContent>{shippingOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Total Price ($)</Label><Input type="number" value={form.price || ''} onChange={e => setForm(f => ({...f, price: parseFloat(e.target.value) || 0}))} data-testid="input-price" /></div>
-              <div><Label>Deposit ($)</Label><Input type="number" value={form.deposit_fee || ''} onChange={e => setForm(f => ({...f, deposit_fee: parseFloat(e.target.value) || 0}))} /></div>
-              <div><Label>Carrier Fee ($)</Label><Input type="number" value={form.carrier_fee || ''} onChange={e => setForm(f => ({...f, carrier_fee: parseFloat(e.target.value) || 0}))} /></div>
-            </div>
+            <h3 className="font-semibold text-slate-900 mb-4">Pricing — All Shipping Types</h3>
+            <PricingEditor
+              pricing={pricing}
+              distance={form.estimated_distance || quote?.estimated_distance}
+              onChange={handlePricingChange}
+            />
           </div>
 
           {/* Notes */}
