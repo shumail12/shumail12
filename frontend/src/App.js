@@ -19,6 +19,8 @@ import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Settings from "./pages/Settings";
 import Users from "./pages/Users";
+import Chat from "./pages/Chat";
+import AdminPanel from "./pages/AdminPanel";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
@@ -98,7 +100,9 @@ function AppRoutes() {
       <Route path="/orders/:id" element={<ProtectedRoute><OrderDetail /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
       <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceDetail /></ProtectedRoute>} />
+      <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
       <Route path="/users" element={<ProtectedRoute requireSuperAdmin><Users /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute requireSuperAdmin><AdminPanel /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

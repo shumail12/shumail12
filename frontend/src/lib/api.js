@@ -70,4 +70,23 @@ export const registerUser = (data) => api.post('/auth/register', data);
 export const getCompanySettings = () => api.get('/settings/company');
 export const updateCompanySettings = (data) => api.put('/settings/company', data);
 
+// Chat
+export const getChatChannels = () => api.get('/chat/channels');
+export const getChatMessages = (channel, limit = 100) => api.get('/chat/messages', { params: { channel, limit } });
+export const sendChatMessage = (data) => api.post('/chat/send', data);
+export const markChatRead = (channel) => api.post('/chat/read', null, { params: { channel } });
+
+// Admin - API Management
+export const getVendorApiKey = () => api.get('/leads/api-key');
+export const regenerateVendorApiKey = () => api.post('/leads/api-key/regenerate');
+export const getApiLogs = (limit = 100) => api.get('/admin/api-logs', { params: { limit } });
+export const getLeadSources = () => api.get('/admin/lead-sources');
+
+// Admin - Lead Distribution
+export const getDistributionRules = () => api.get('/admin/distribution');
+export const upsertDistributionRule = (agent_name, source, weight = 1, enabled = true) =>
+  api.post('/admin/distribution', null, { params: { agent_name, source, weight, enabled } });
+export const deleteDistributionRule = (agent_name, source) =>
+  api.delete('/admin/distribution', { params: { agent_name, source } });
+
 export default api;

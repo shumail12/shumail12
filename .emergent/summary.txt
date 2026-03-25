@@ -1,151 +1,164 @@
 <analysis>**original_problem_statement**: I want to build a CRM for my auto transport brokerage company. Core features requested include lead processing, dispatch, quotes, tracking, invoicing, reporting, and SMS text notifications. 
-*PRODUCT REQUIREMENTS:* Modern/clean UI, JWT-based auth, Twilio SMS integration, full-page details for entities, super admin user assignment capabilities, custom branding (Shumail Technologies), and handle large datasets (37k+ records).
+*PRODUCT REQUIREMENTS:* Modern/clean UI, JWT-based auth, Twilio SMS integration, full-page details for entities, super admin user assignment capabilities, custom branding (Shumail Technologies LLC / Breamway Auto Transport), handle large datasets (~39.8k records). *NEW REQUIREMENTS:* Public API Lead Intake from external vendors (TOLM format), real-time lead distribution, Super Admin control panel, and a simple internal chat system (1-on-1 + team group).
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
-**what currently exists?**: A full-stack Auto Transport CRM built with React (Frontend), Tailwind CSS, Shadcn UI, and FastAPI + MongoDB (Backend). The application features a custom branded login (Shumail Technologies), JWT authentication, and pagination handling for 37,000+ imported leads and quotes. Features include dashboard, leads, quotes, orders, invoices, super-admin assignment controls, and detailed full-page views for entities.
+**what currently exists?**: A fully functional React (Tailwind/Shadcn) + FastAPI + MongoDB CRM. Features include JWT Auth (self-healing raw bcrypt), dashboard, Leads -> Quotes -> Orders workflow, real-time SSE notifications for new leads, quick view modals, vehicle search integrations, and an automated startup script that imports ~39.8k legacy records on a fresh deployment. The Made with Emergent branding has been fully removed.
 
 **Last working item**: 
-    - Last item agent was working: Updating the  page UI to display customer name, phone, email, and pickup/drop-off addresses in the table, mirroring the Leads page.
-    - Status: USER VERIFICATION PENDING
+    - Last item agent was working: Implementing the backend logic for the Advanced Public Lead Intake API, Lead Distribution system, Super Admin Control Panel, and the Internal Chat System. 
+    - Reasoning: The agent just executed massive  operations on  to add the endpoints and models for these features, but has not yet built the corresponding Frontend UI.
+    - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? screenshot tool (Frontend UI verification)
+    - Which testing method agent to use? both (Use  after the frontend UI is built and connected to the new backend endpoints).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Verify Direct Bcrypt Implementation for Auth (P0)
-  Issue 2: Verify  Table UI Layout (P1)
+  Issue 1: Frontend Implementation for Lead Distribution, Control Panel, and Chat (P0)
   
   Issues Detail:
   - Issue 1: 
-     - Attempted fixes: The user could not log into their deployed app due to a  library  with . The agent stripped  and replaced it with direct  and  logic in , then reset the superadmin password.
-     - Next debug checklist: Check  to ensure duplicate  and  functions are fully removed. Ensure the  endpoint correctly processes the direct bcrypt check. 
-     - Why fix this issue and what will be achieved with the fix? Critical for user access to the live CRM.
-     - Status: TESTING PENDING
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? both
-     - Blocked on other issue: None
-  - Issue 2: 
-     - Attempted fixes: Agent updated  to add multiple new columns (customer name, number, email, pickup/drop address).
-     - Next debug checklist: Render the Quotes page. Verify that adding these 5+ new data points hasn't broken the table layout or caused horizontal overflow issues.
-     - Why fix this issue and what will be achieved with the fix? Ensures the UI remains usable after fulfilling the user's latest request.
-     - Status: TESTING PENDING
+     - Attempted fixes: Backend endpoints for chat, public lead API specs, and lead distribution are injected into , but the frontend is completely missing.
+     - Next debug checklist: Review the end of  to see the new routes (, , etc.). Create the React components for the Super Admin control panel (to manage API keys & distribution) and the UI for the Internal Chat. 
+     - Why fix this issue and what will be achieved with the fix? Fulfills the user's latest massive feature request.
+     - Status: IN PROGRESS
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? frontend
+     - Should Test frontend/backend/both after fix? both
      - Blocked on other issue: None
 
 **In progress Task List**:
-  *None*
+  Task 1: Simple Internal Chat System (P0)
+     - Where to resume: Build the frontend UI for 1-on-1 direct messaging and an All Team group chat. Add chat buttons to lead details. Integrate with the backend routes just created.
+     - What will be achieved with this? Team communication without page refreshes.
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on something: None
 
-**Upcoming and Future Tasks**:
-  Upcoming Tasks:
-  - Integrate Twilio SMS Notifications (P1) - Playbook was fetched in the first workflow, but backend logic to trigger SMS (e.g., on quote creation or dispatch) has not been implemented yet.
-  
-  Future Tasks:
-  - Central Dispatch API Integration (P2) - Deferred per user request.
-  - Customer-facing tracking portal (P2) - Suggested by agent, user may want this implemented later.
+  Task 2: Lead Distribution System & Admin Control (P0)
+     - Where to resume: Build a Super Admin panel to toggle API lead intake, generate vendor API keys, and manage source-based lead distribution weights/checkboxes. 
+     - What will be achieved with this? Gives admin full control over vendor leads while hiding Lead Source IDs from regular staff.
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? both
+     - Blocked on something: None
 
-**Completed work in this session**:
-- Initial Setup: React, FastAPI, MongoDB, Tailwind CSS (DONE)
-- JWT Authentication (DONE)
-- CRM Core Pages: Dashboard, Leads, Quotes, Orders, Dispatch, Invoices (DONE)
-- UI Branding updates to Shumail Technologies (DONE)
-- CSV Bulk Data Import script for 37k+ quotes () (DONE)
-- Pagination (skip/limit of 100) added to backend and frontend to resolve out-of-memory container crashes (DONE)
-- Full-page detail views for Leads, Quotes, Orders, Invoices (DONE)
-- Super-admin user assignment logic (DONE)
+**Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - AI Pricing Engine (Distance-based using Google Maps API) (P1)
+    - Customer & Driver Invoice system (Breamway branded) (P1)
+    - Auto Dealers module with CSV upload (P1)
+    
+    Future Tasks:
+    - Agreement/Contract system with digital signature (P2)
+    - Automated email follow-up system (P2)
+    - Twilio SMS Notifications (requires user Twilio API credentials) (P2)
+    - Invoice payment update bug fix (P2)
+    - Central Dispatch API Integration (P3 - Deferred by user)
 
-**Earlier issues found/mentioned but not fixed**:
+**Completed work in this session**
+- MongoDB  pagination optimization for  table (DONE)
+- Implemented Super Admin Forgot Password flow (Security question: Who is your work? -> Shark) (DONE)
+- Completely removed Made with Emergent branding from  (DONE)
+- Fixed Passlib auth bug with a self-healing raw  verification on server startup (DONE)
+- Unified Data Model & restructured CRM to handle full  workflow (DONE)
+- Added Auto-Import logic to load 39.8k records from bundled CSVs on fresh deployments (DONE)
+- Real-time SSE Notification Bell & Popups for vendor lead intake (DONE)
+
+**Earlier issues found/mentioned but not fixed**
    Issue 1:  
-   - Debug checklist:  / . The  initially noted a minor bug with invoice payment updates not processing correctly.
+   - Debug checklist:  / . The  initially noted a minor bug with invoice payment updates not processing correctly (found in Phase 1).
    - Why to solve this issue and what will be achieved with this? Ensures payments can be marked accurately in the CRM.
    - Should Test frontend/backend/both after fix: both
    - Is recurring issue? N
 
-**Known issue recurrence from previous fork**:
-  - Issue recurrence in previous fork: N/A (First fork)
-  - Recurrence count: 0
-  - Status: NOT STARTED
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: The passlib deployment crash.
+  - Recurrence count: 1
+  - Status: RESOLVED (Replaced with direct  and auto-healing startup hook).
 
-**Code Architecture**:
+**Code Architecture**
 /app
 ├── backend
-│   ├── server.py
+│   ├── server.py (Contains all API logic, SSE managers, models)
 │   ├── import_quotes.py
 │   ├── seed_data.py
+│   ├── data_breamway_quotes.csv (Bundled legacy data)
+│   ├── data_export2.csv (Bundled legacy data)
 │   └── .env
 ├── frontend
 │   ├── src
 │   │   ├── components/Layout.js
 │   │   ├── pages
-│   │   │   ├── Login.js, Dashboard.js, Leads.js, LeadDetail.js, Quotes.js, QuoteDetail.js, Orders.js, OrderDetail.js, Dispatch.js, Invoices.js, InvoiceDetail.js, Users.js, Settings.js
+│   │   │   ├── Login.js, ForgotPassword.js, Dashboard.js, Leads.js, LeadDetail.js, Quotes.js, QuoteDetail.js, Orders.js, OrderDetail.js, Dispatch.js, Invoices.js, InvoiceDetail.js, Users.js, Settings.js
 │   │   ├── lib/api.js
-│   │   ├── context/AuthContext.js
+│   │   ├── context/AuthContext.js, NotificationContext.js
 │   │   ├── App.js
 │   │   └── index.css
 │   ├── package.json
 │   └── tailwind.config.js
 └── test_reports
-    └── iteration_1.json
+    ├── iteration_1.json
+    ├── iteration_2.json
+    ├── iteration_3.json
+    └── iteration_4.json
 
-**Key Technical Concepts**:
+**Key Technical Concepts**
 Frontend: React, Tailwind CSS, Shadcn UI
-Backend: FastAPI, MongoDB (Motor Async), direct  hashing
-Architecture: Client-Server with JWT Auth, custom pagination for large datasets
+Backend: FastAPI, MongoDB (Motor Async), SSE (Server-Sent Events) for real-time notifications, direct  hashing.
 
-**key DB schema**:
-  - users: {username, email, full_name, hashed_password, role, company, phone, is_active}
-  - leads/quotes: {id, customer_name, email, phone, pickup_address, delivery_address, vehicle_year, vehicle_make, vehicle_model, price, status, assigned_to}
+**key DB schema**
+  - users: {username, email, role, hashed_password, security_question, security_answer}
+  - quotes: (unified for leads/quotes/orders) {quote_number, status, customer_name, vehicle, pickup_city, shipping_type, price, lead_source}
+  - notifications: {user_id, title, message, read, created_at, type, link}
+  - chat_messages: {sender_id, receiver_id, message, is_group, read, created_at}
 
-**changes in tech stack**:
-  - Auth Dependency:  was removed because it threw an  on Python 3.11. Agent transitioned to using  and  directly. Do NOT install/use passlib.
+**changes in tech stack**
+  - Added SSE streaming for real-time React hooks ().
 
-**All files of reference**: 
-  -  (Core API logic, auth fix, pagination added)
-  -  (Most recently edited file to add customer info columns)
-  -  (Customized heavily with Shumail Tech branding/animations)
-  -  (One-time script used to seed DB with 37k records)
+**All files of reference** 
+  -  (Heavily modified; SSE implemented, chat models added, lead API updated).
+  -  (Created for real-time popups).
+  -  &  (Updated for new navigation and Notification Bell).
+  -  &  (Added to backend to support auto-import on production deploy).
 
 **Areas that need refactoring**: 
-  - : Agent used search_replace heavily to rip out  and implement direct . Code should be reviewed for duplicate functions or leftover imports.
+  -  is nearly 1,200 lines long. It currently houses all models, routes, SSE logic, and auth. Consider splitting into routers () and models () if the context window gets constrained.
 
-**key api endpoints**:
-  - 
-  -  (Requires  and  params to prevent crashes)
-  -  (Requires  and  params to prevent crashes)
+**key api endpoints**
+  -  (Vendor API with )
+  -  (SSE endpoint)
+  -  (Public Lead API documentation)
 
-**Critical Info for New Agent**: 
-  - **Memory Limits**: The database contains >37,000 records. Any backend query fetching list data MUST use  and . The pod will instantly crash (OOM Kill) if you try to pull all leads/quotes at once.
-  - **Auth Integrity**: The application is deployed. The previous  error broke the user's login on production. Ensure the raw  implementation works smoothly.
-  - **Branding**: The user wants specific branding: Shumail Technologies. Avoid generic names. 
-  - Superadmin credentials for testing:  / .
+**Critical Info for New Agent** 
+  - **Auto-Import Dependency:** The app has a startup event in  that auto-imports  quotes if the DB contains  quotes. Do NOT break this logic, as it is required for the user's deployed production environment to populate.
+  - **Superadmin Credentials:**  / . Security Answer: .
+  - **Lead Source:** Regular staff MUST NOT see the vendor Lead Source ID. Only Super Admin can view this.
+  - **Change in Requirements:** The user explicitly stated in their last message to **SKIP the Email parsing** and focus purely on the Public View API for lead intake.
 
-**documents and test reports created in this job**: 
-  - /app/design_guidelines.json
+**documents and test reports created in this job** 
   - /app/memory/PRD.md
-  - /app/test_reports/iteration_1.json
+  - /app/test_reports/iteration_2.json
+  - /app/test_reports/iteration_3.json
+  - /app/test_reports/iteration_4.json
 
-**Last 10 User Messages and any pending HUMAN messages**: 
- 1. Like in leads pick up and drop addreess customer name and number and email shows. same show that thing in Quotes as well. (COMPLETED - pending UI verification)
- 2. same issue [screenshot attached] (COMPLETED - Fixed by removing passlib)
- 3. I am not able to login. its showing wrong password or user? (COMPLETED - Auth fix applied)
- 4. Why on my app is it still showing made with Emergent? (RESOLVED - Clarified to user)
- 5. and add the option of going to the next page and showing 100 there and then so on. and remove current writings and add a login page... (COMPLETED)
- 6. but I can see only few of quotes. how ccan I see all the 37k quotes? show 100 on one page... (COMPLETED)
- 7. These are quotes and add for super admin an option of assigning any quote to any other user anytime. (COMPLETED)
- 8. Guide me on how to update DNS in an easy way... (RESOLVED)
- 9. I want the link named on my website domain... (RESOLVED)
- 10. Actually I can't open any lead, quote or order in a form like full page. add this option... (COMPLETED)
+**Last 10 User Messages and any pending HUMAN messages** 
+ 1. Remove email intake and create public view API to receive leads easily like mentioned above... make API lead receiving the priority. Add a simple internal chat system... (IN PROGRESS - Agent added backend code, frontend pending)
+ 2. Enhance my CRM system to support a complete lead intake system (Email + API)... (SUPERSEDED by message above)
+ 3. and also add back lead option in crm also. don't remove it. when lead will receive it will land in lead section... (COMPLETED)
+ 4. I cant find the 38k and something quotes in CRM [Screenshot]. (COMPLETED - Fixed via Auto-Import script)
+ 5. Keep the credentials same shumail.s HONDA@2026 (RESOLVED)
+ 6. Enhance my CRM system for Breamway Auto Transport by implementing a complete external lead integration system with real-time notifications... (COMPLETED)
+ 7. I can't find 37k in updated deploy so add this with the new format and clear if available last data. (COMPLETED)
+ 8. Enhance and fully upgrade my CRM system for Breamway... Build Lead->Quote->Order workflow, AI pricing, invoices... (PARTIALLY COMPLETED - Phase 1 Done)
 
 **Project Health Check:**
-  - Broken: Minor potential layout breakage in  due to adding many new columns. 
+  - Broken: None currently, but UI for the latest injected backend routes (Chat, Lead Distribution) is missing.
   - Mocked: None.
 
-**3rd Party Integrations**:
-  - Twilio (SMS Notifications) — requires User API Key. Playbook has been fetched but actual API implementation is pending.
+**3rd Party Integrations**
+  - Twilio (SMS Notifications) — requires User API Key. (Pending implementation).
 
-**Testing status**:
-  - Testing agent used after significant changes: YES
+**Testing status**
+  - Testing agent used after significant changes: YES (Iterations 2, 3, 4 passed 100%).
   - Troubleshoot agent used after agent stuck in loop: NO
   - Test files created: 
   - Known regressions: None currently.
@@ -154,7 +167,7 @@ Architecture: Client-Server with JWT Auth, custom pagination for large datasets
   - URL: 
   - Username: 
   - Password: 
+  - Security Answer: 
 
-**What agent forgot to execute**:
-  - Implementing the actual SMS dispatch via Twilio (user requested text notifications initially, agent fetched the playbook, but didn't hook it up to any backend routes yet).
-  - Checking the frontend UI via screenshot after dumping 5 new columns into .</analysis>
+**What agent forgot to execute**
+  - The agent injected backend code for the Chat System, Admin Control Panel, and Lead Distribution, but did not implement ANY of the frontend UI for these features before the conversation ended. The next agent must build the React pages/components to interface with these new backend endpoints.</analysis>

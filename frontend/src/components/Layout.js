@@ -18,6 +18,8 @@ import {
   X,
   CheckCheck,
   Users,
+  MessageSquare,
+  ShieldCheck,
 } from 'lucide-react';
 
 const getNavigation = (isSuperAdmin) => {
@@ -27,9 +29,11 @@ const getNavigation = (isSuperAdmin) => {
     { name: 'Quotes', href: '/quotes', icon: FileText },
     { name: 'Orders', href: '/orders', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
+    { name: 'Chat', href: '/chat', icon: MessageSquare },
   ];
   if (isSuperAdmin) {
     baseNav.push({ name: 'Users', href: '/users', icon: UserCog });
+    baseNav.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck });
   }
   baseNav.push({ name: 'Settings', href: '/settings', icon: Settings });
   return baseNav;

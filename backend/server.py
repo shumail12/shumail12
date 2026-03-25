@@ -413,6 +413,7 @@ class CompanySettings(BaseModel):
 class VendorLeadInput(BaseModel):
     name: str
     phone: Optional[str] = ""
+    phone2: Optional[str] = ""
     email: Optional[str] = ""
     vehicle: Optional[dict] = None  # {year, make, model}
     vehicle_year: Optional[str] = ""
@@ -422,11 +423,23 @@ class VendorLeadInput(BaseModel):
     delivery: Optional[str] = ""
     pickup_city: Optional[str] = ""
     pickup_state: Optional[str] = ""
+    pickup_zip: Optional[str] = ""
     delivery_city: Optional[str] = ""
     delivery_state: Optional[str] = ""
+    delivery_zip: Optional[str] = ""
     date: Optional[str] = None
+    pickup_date: Optional[str] = None
+    running: Optional[str] = ""
     source: Optional[str] = "vendor"
+    lead_source_id: Optional[str] = ""
     notes: Optional[str] = ""
+
+# --- Chat ---
+
+class ChatMessageInput(BaseModel):
+    receiver_id: Optional[str] = None  # null = group chat
+    channel: str = "all-team"  # 'all-team' or 'dm-{user1}-{user2}'
+    text: str
 
 
 # ==================== AUTHENTICATION ====================
@@ -626,6 +639,18 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
 
 
 # ==================== LEAD ROUTES ====================
+
+# API Key routes must be defined BEFORE parameterized routes to avoid conflicts
+@api_router.get("/leads/api-key")
+async def get_vendor_api_key(current_user: User = Depends(require_superadmin)):
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    return {"api_key": key_doc["key"] if key_doc else "NOT_CONFIGURED"}
+
+@api_router.post("/leads/api-key/regenerate")
+async def regenerate_vendor_api_key(current_user: User = Depends(require_superadmin)):
+    new_key = "brw-" + secrets.token_hex(16)
+    await db.settings.update_one({"_id": "vendor_api_key"}, {"$set": {"key": new_key}})
+    return {"api_key": new_key}
 
 @api_router.get("/leads")
 async def get_leads(
@@ -954,12 +979,9 @@ async def delete_invoice(invoice_id: str, current_user: User = Depends(get_curre
 # ==================== LEAD INTAKE (VENDOR API) ====================
 
 def parse_location(location_str):
-    """Parse 'City, ST' into city and state"""
-    if not location_str:
-        return '', ''
+    if not location_str: return '', ''
     parts = [p.strip() for p in location_str.split(',')]
-    if len(parts) >= 2:
-        return parts[0], parts[-1]
+    if len(parts) >= 2: return parts[0], parts[-1]
     return location_str, ''
 
 async def verify_vendor_key(x_api_key: str = FastAPIHeader(alias="X-API-Key", default="")):
@@ -968,31 +990,55 @@ async def verify_vendor_key(x_api_key: str = FastAPIHeader(alias="X-API-Key", de
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
 
+async def distribute_lead(source: str):
+    """Auto-distribute lead to agent based on source+weight rules"""
+    rules = await db.distribution_rules.find({"source": source, "enabled": True}, {"_id": 0}).to_list(None)
+    if not rules:
+        rules = await db.distribution_rules.find({"source": "default", "enabled": True}, {"_id": 0}).to_list(None)
+    if not rules:
+        return ""
+    # Weighted random selection
+    import random
+    total_weight = sum(r.get("weight", 1) for r in rules)
+    if total_weight == 0:
+        return ""
+    pick = random.uniform(0, total_weight)
+    current = 0
+    for r in rules:
+        current += r.get("weight", 1)
+        if pick <= current:
+            return r.get("agent_name", "")
+    return rules[0].get("agent_name", "")
+
 @api_router.post("/leads/incoming")
 async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_vendor_key)):
     """Public endpoint for vendors to post leads"""
-    # Parse vehicle from nested object or flat fields
     v_year = data.vehicle_year or (data.vehicle.get("year", "") if data.vehicle else "")
     v_make = data.vehicle_make or (data.vehicle.get("make", "") if data.vehicle else "")
     v_model = data.vehicle_model or (data.vehicle.get("model", "") if data.vehicle else "")
 
-    # Parse locations
     p_city = data.pickup_city or ""
     p_state = data.pickup_state or ""
+    p_zip = data.pickup_zip or ""
     d_city = data.delivery_city or ""
     d_state = data.delivery_state or ""
+    d_zip = data.delivery_zip or ""
     if data.pickup and not p_city:
         p_city, p_state = parse_location(data.pickup)
     if data.delivery and not d_city:
         d_city, d_state = parse_location(data.delivery)
 
+    source = data.source or data.lead_source_id or "vendor"
+    assigned_agent = await distribute_lead(source)
+
     quote_number = await get_next_quote_number()
     quote_doc = {
         "id": str(uuid.uuid4()),
         "quote_number": quote_number,
-        "agent_name": "",
+        "agent_name": assigned_agent,
         "customer_name": data.name,
         "phone": data.phone or "",
+        "phone2": data.phone2 or "",
         "email": data.email or "",
         "vehicle_year": str(v_year),
         "vehicle_make": str(v_make),
@@ -1000,15 +1046,19 @@ async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_ve
         "pickup_address": data.pickup or f"{p_city}, {p_state}".strip(", "),
         "pickup_city": p_city,
         "pickup_state": p_state,
+        "pickup_zip": p_zip,
         "delivery_address": data.delivery or f"{d_city}, {d_state}".strip(", "),
         "delivery_city": d_city,
         "delivery_state": d_state,
-        "pickup_date": data.date,
+        "delivery_zip": d_zip,
+        "pickup_date": data.pickup_date or data.date or "",
+        "running": data.running or "",
         "shipping_type": "standard",
         "price": 0,
         "deposit_fee": 150,
         "carrier_fee": 0,
-        "source": data.source or "vendor",
+        "source": source,
+        "lead_source_id": data.lead_source_id or "",
         "status": "lead",
         "notes": data.notes or "",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1017,78 +1067,170 @@ async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_ve
     await db.quotes.insert_one(quote_doc)
     quote_doc.pop("_id", None)
 
-    # Create notification
+    # Log API usage
+    await db.api_logs.insert_one({
+        "type": "lead_intake", "source": source, "quote_number": quote_number,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
     vehicle_str = " ".join(filter(None, [str(v_year), str(v_make), str(v_model)]))
     route_str = f"{p_city or '?'} → {d_city or '?'}"
     notif_doc = {
-        "id": str(uuid.uuid4()),
-        "type": "new_lead",
-        "title": "New Lead Received",
+        "id": str(uuid.uuid4()), "type": "new_lead", "title": "New Lead Received",
         "message": f"{data.name} - {vehicle_str} - {route_str}",
-        "quote_id": quote_doc["id"],
-        "quote_number": quote_number,
-        "customer_name": data.name,
-        "route": route_str,
-        "vehicle": vehicle_str,
-        "is_read": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "quote_id": quote_doc["id"], "quote_number": quote_number,
+        "customer_name": data.name, "route": route_str, "vehicle": vehicle_str,
+        "is_read": False, "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(notif_doc)
     notif_doc.pop("_id", None)
-
-    # Broadcast to all connected SSE clients
-    await sse_manager.broadcast("new_lead", {
-        "notification": notif_doc,
-        "quote": quote_doc,
-    })
+    await sse_manager.broadcast("new_lead", {"notification": notif_doc, "quote": quote_doc})
 
     return {"status": "success", "message": "Lead received", "quote_number": quote_number, "quote_id": quote_doc["id"]}
 
 
+# Public specs - NO AUTH required
 @api_router.get("/leads/specs")
-async def get_lead_posting_specs(current_user: User = Depends(get_current_user)):
-    """Return lead posting specifications for vendors"""
+async def get_lead_posting_specs():
+    """Public API documentation for vendors - no login required"""
     key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
-    api_key = key_doc["key"] if key_doc else "NOT_CONFIGURED"
-    base_url = os.environ.get("REACT_APP_BACKEND_URL", "https://your-domain.com")
-
+    api_key = key_doc["key"] if key_doc else "CONTACT_ADMIN"
+    base_url = os.environ.get("REACT_APP_BACKEND_URL", "https://crm.breamway.com")
     return {
         "endpoint": f"{base_url}/api/leads/incoming",
         "method": "POST",
         "content_type": "application/json",
-        "authentication": {
-            "type": "API Key",
-            "header": "X-API-Key",
-            "key": api_key,
-        },
+        "authentication": {"type": "API Key", "header": "X-API-Key", "key": api_key},
         "required_fields": ["name"],
-        "optional_fields": ["phone", "email", "vehicle", "pickup", "delivery", "date", "source", "notes"],
-        "sample_request": {
-            "name": "John Doe",
-            "phone": "1234567890",
-            "email": "john@example.com",
-            "vehicle": {"year": "2020", "make": "Toyota", "model": "Camry"},
-            "pickup": "Los Angeles, CA",
-            "delivery": "Houston, TX",
-            "date": "2026-01-01",
+        "all_fields": {
+            "name": "Customer Name (required)",
+            "phone": "Phone Number", "phone2": "Phone 2 (alternate)",
+            "email": "Email Address",
+            "vehicle_year": "Vehicle Year", "vehicle_make": "Vehicle Make", "vehicle_model": "Vehicle Model",
+            "vehicle": "OR pass as object: {year, make, model}",
+            "pickup": "Pickup Location (e.g. 'Los Angeles, CA')",
+            "pickup_city": "Pickup City", "pickup_state": "Pickup State", "pickup_zip": "Pickup Zip",
+            "delivery": "Delivery Location (e.g. 'Houston, TX')",
+            "delivery_city": "Delivery City", "delivery_state": "Delivery State", "delivery_zip": "Delivery Zip",
+            "pickup_date": "Pickup Date", "date": "Alias for pickup_date",
+            "running": "Running condition (yes/no)",
+            "lead_source_id": "Lead Source ID",
+            "source": "Source name (e.g. TOLM, CarrierSoft)",
+            "notes": "Additional notes",
         },
-        "sample_response_success": {"status": "success", "message": "Lead received", "quote_number": "BR039999", "quote_id": "uuid-here"},
-        "sample_response_error": {"status": "error", "message": "Invalid data"},
+        "sample_request": {
+            "name": "John Doe", "phone": "1234567890", "phone2": "9876543210",
+            "email": "john@example.com",
+            "vehicle_year": "2020", "vehicle_make": "Toyota", "vehicle_model": "Camry",
+            "pickup_city": "Los Angeles", "pickup_state": "CA", "pickup_zip": "90001",
+            "delivery_city": "Houston", "delivery_state": "TX", "delivery_zip": "77001",
+            "pickup_date": "2026-02-15", "running": "yes",
+            "lead_source_id": "TOLM-12345", "source": "TOLM",
+            "notes": "Customer prefers morning pickup"
+        },
+        "sample_response_success": {"status": "success", "message": "Lead received", "quote_number": "BR040001"},
+        "sample_response_error": {"detail": "Invalid API key"},
     }
 
 
-@api_router.get("/leads/api-key")
-async def get_vendor_api_key(current_user: User = Depends(require_superadmin)):
-    """Get the vendor API key (superadmin only)"""
-    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
-    return {"api_key": key_doc["key"] if key_doc else "NOT_CONFIGURED"}
+# ==================== ADMIN CONTROL PANEL ====================
 
-@api_router.post("/leads/api-key/regenerate")
-async def regenerate_vendor_api_key(current_user: User = Depends(require_superadmin)):
-    """Regenerate vendor API key"""
-    new_key = "brw-" + secrets.token_hex(16)
-    await db.settings.update_one({"_id": "vendor_api_key"}, {"$set": {"key": new_key}})
-    return {"api_key": new_key}
+@api_router.get("/admin/api-logs")
+async def get_api_logs(limit: int = 100, current_user: User = Depends(require_superadmin)):
+    logs = await db.api_logs.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
+    total = await db.api_logs.count_documents({})
+    return {"logs": logs, "total": total}
+
+@api_router.get("/admin/lead-sources")
+async def get_lead_sources(current_user: User = Depends(require_superadmin)):
+    sources = await db.quotes.distinct("source")
+    result = []
+    for s in sources:
+        if s:
+            count = await db.quotes.count_documents({"source": s})
+            result.append({"name": s, "count": count})
+    return sorted(result, key=lambda x: x["count"], reverse=True)
+
+
+# ==================== LEAD DISTRIBUTION ====================
+
+@api_router.get("/admin/distribution")
+async def get_distribution_rules(current_user: User = Depends(require_superadmin)):
+    rules = await db.distribution_rules.find({}, {"_id": 0}).to_list(None)
+    return rules
+
+@api_router.post("/admin/distribution")
+async def upsert_distribution_rule(
+    agent_name: str, source: str, weight: int = 1, enabled: bool = True,
+    current_user: User = Depends(require_superadmin)
+):
+    await db.distribution_rules.update_one(
+        {"agent_name": agent_name, "source": source},
+        {"$set": {"agent_name": agent_name, "source": source, "weight": weight, "enabled": enabled}},
+        upsert=True
+    )
+    return {"message": "Rule saved"}
+
+@api_router.delete("/admin/distribution")
+async def delete_distribution_rule(
+    agent_name: str, source: str,
+    current_user: User = Depends(require_superadmin)
+):
+    await db.distribution_rules.delete_one({"agent_name": agent_name, "source": source})
+    return {"message": "Rule deleted"}
+
+
+# ==================== CHAT SYSTEM ====================
+
+@api_router.post("/chat/send")
+async def send_message(msg: ChatMessageInput, current_user: User = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "sender_id": current_user.id,
+        "sender_name": current_user.full_name,
+        "receiver_id": msg.receiver_id,
+        "channel": msg.channel,
+        "text": msg.text,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.chat_messages.insert_one(doc)
+    doc.pop("_id", None)
+    await sse_manager.broadcast("chat_message", {"message": doc})
+    return doc
+
+@api_router.get("/chat/messages")
+async def get_chat_messages(
+    channel: str = "all-team", limit: int = 100,
+    current_user: User = Depends(get_current_user)
+):
+    messages = await db.chat_messages.find({"channel": channel}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    messages.reverse()
+    return messages
+
+@api_router.get("/chat/channels")
+async def get_chat_channels(current_user: User = Depends(get_current_user)):
+    users = await db.users.find({"is_active": True}, {"_id": 0, "id": 1, "full_name": 1, "role": 1, "username": 1}).to_list(None)
+    channels = [{"id": "all-team", "name": "All Team", "type": "group"}]
+    for u in users:
+        if u["id"] != current_user.id:
+            dm_id = "-".join(sorted([current_user.id, u["id"]]))
+            channels.append({"id": f"dm-{dm_id}", "name": u["full_name"], "type": "dm", "user_id": u["id"]})
+    # Unread counts
+    for ch in channels:
+        ch["unread"] = await db.chat_messages.count_documents({
+            "channel": ch["id"], "is_read": False,
+            "sender_id": {"$ne": current_user.id}
+        })
+    return channels
+
+@api_router.post("/chat/read")
+async def mark_chat_read(channel: str, current_user: User = Depends(get_current_user)):
+    await db.chat_messages.update_many(
+        {"channel": channel, "sender_id": {"$ne": current_user.id}, "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "Marked as read"}
 
 
 # ==================== NOTIFICATIONS & SSE ====================
