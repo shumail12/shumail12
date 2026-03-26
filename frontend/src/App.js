@@ -25,6 +25,7 @@ import Agreements from "./pages/Agreements";
 import AgreementDetail from "./pages/AgreementDetail";
 import PublicSign from "./pages/PublicSign";
 import Revenue from "./pages/Revenue";
+import Reminders from "./pages/Reminders";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, requireSuperAdmin = false }) => {
@@ -112,6 +113,7 @@ function AppRoutes() {
       <Route path="/users" element={<ProtectedRoute requireSuperAdmin><Users /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute requireSuperAdmin><AdminPanel /></ProtectedRoute>} />
       <Route path="/revenue" element={<ProtectedRoute requireSuperAdmin><Revenue /></ProtectedRoute>} />
+                  <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -4,6 +4,7 @@ import {
   getVendorApiKey, regenerateVendorApiKey, getApiLogs,
   getLeadSources, getDistributionRules, upsertDistributionRule,
   deleteDistributionRule, getUsers, getQuotesAgents,
+  getLeadEmail, regenerateLeadEmail,
 } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -15,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { ScrollArea } from '../components/ui/scroll-area';
 import {
   Key, RefreshCw, Copy, Shield, BarChart3, Network,
-  Trash2, Plus, AlertTriangle, CheckCircle, ExternalLink,
+  Trash2, Plus, AlertTriangle, CheckCircle, ExternalLink, Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +31,8 @@ const AdminPanel = () => {
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [addRuleDialog, setAddRuleDialog] = useState(false);
   const [newRule, setNewRule] = useState({ agent_name: '', source: 'default', weight: 1 });
+  const [leadEmail, setLeadEmail] = useState('');
+  const [regenEmailConfirm, setRegenEmailConfirm] = useState(false);
 
   const fetchApiKey = useCallback(async () => {
     try {
@@ -67,13 +70,21 @@ const AdminPanel = () => {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchLeadEmail = useCallback(async () => {
+    try {
+      const res = await getLeadEmail();
+      setLeadEmail(res.data.email);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchApiKey();
     fetchLogs();
     fetchSources();
     fetchRules();
     fetchAgents();
-  }, [fetchApiKey, fetchLogs, fetchSources, fetchRules, fetchAgents]);
+    fetchLeadEmail();
+  }, [fetchApiKey, fetchLogs, fetchSources, fetchRules, fetchAgents, fetchLeadEmail]);
 
   const handleRegenerate = async () => {
     try {
@@ -116,6 +127,21 @@ const AdminPanel = () => {
       toast.error('Failed to delete rule');
     }
   };
+
+  const handleRegenEmail = async () => {
+    try {
+      const res = await regenerateLeadEmail();
+      setLeadEmail(res.data.email);
+      setRegenEmailConfirm(false);
+      toast.success('Lead delivery email regenerated');
+    } catch {
+      toast.error('Failed to regenerate email');
+    }
+  };
+
+  const vendorDocsUrl = `${process.env.REACT_APP_BACKEND_URL}/api/vendor/docs`;
+  const apiEndpoint = `${process.env.REACT_APP_BACKEND_URL}/api/leads/incoming`;
+  const emailEndpoint = `${process.env.REACT_APP_BACKEND_URL}/api/leads/email-incoming`;
 
   const handleToggleRule = async (rule) => {
     try {
@@ -224,6 +250,97 @@ const AdminPanel = () => {
                 </pre>
               </div>
             </div>
+
+            {/* Lead Delivery Email */}
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <Mail className="w-5 h-5 text-blue-600" />
+                <h2 className="font-heading font-semibold text-slate-900 text-lg">Lead Delivery Email</h2>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">Vendors can send leads to this email address in plain-text format. Leads will auto-create in your CRM.</p>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-1 relative">
+                  <Input readOnly value={leadEmail || 'Loading...'} className="font-mono text-sm text-blue-700 bg-blue-50 border-blue-200" data-testid="lead-delivery-email" />
+                  <Button variant="ghost" size="sm" className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-2" onClick={() => copyToClipboard(leadEmail)} data-testid="copy-lead-email">
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <Button variant="outline" className="text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => setRegenEmailConfirm(true)} data-testid="regen-email-btn">
+                  <RefreshCw className="w-4 h-4 mr-2" />Regenerate
+                </Button>
+              </div>
+
+              {/* Email Format Template */}
+              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <h3 className="font-semibold text-slate-900 text-xs uppercase tracking-wider mb-3">Required Email Format (Plain Text)</h3>
+                <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-sm text-emerald-400 font-mono whitespace-pre-wrap">{`Name: John Smith
+Pickup City: Redding
+Pickup State: CA
+Pickup Zip: 96003
+Delivery City: Orlando
+Delivery State: FL
+Delivery Zip: 32801
+Year: 2004
+Make: Ford
+Model: Focus
+Pickup Date: 04/30/2014
+Running: true
+Email: testing@emailaddress.com
+Phone: 111-111-1111
+Phone 2: 111-111-1111
+Notes: Notes go here.
+Lead Source ID#: BR000000`}</pre>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Leads sent as plain text (not HTML) to the email above will be auto-parsed and added to the CRM.</p>
+              </div>
+
+              {/* Email API Endpoint */}
+              <div className="mt-4 bg-slate-50 rounded-lg p-4 border border-slate-200">
+                <h3 className="font-semibold text-slate-900 text-xs uppercase tracking-wider mb-2">Email Lead API Endpoint</h3>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-mono font-bold rounded">POST</span>
+                  <code className="text-sm text-slate-700 font-mono">{emailEndpoint}</code>
+                  <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => copyToClipboard(emailEndpoint)}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Send the plain-text body as JSON: <code className="bg-slate-200 px-1 rounded">{"{"}"body": "Name: ...\nPickup City: ..."{"}"}</code></p>
+              </div>
+            </div>
+
+            {/* Vendor Docs Link */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-blue-800 text-sm">Vendor API Documentation</h3>
+                <p className="text-xs text-blue-600">Share this link with your vendors for full API docs</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => copyToClipboard(vendorDocsUrl)} className="text-blue-700" data-testid="copy-vendor-docs">
+                  <Copy className="w-3.5 h-3.5 mr-1" />Copy Link
+                </Button>
+                <a href={vendorDocsUrl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm" className="text-blue-700 border-blue-300" data-testid="open-vendor-docs">
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" />Open Docs
+                  </Button>
+                </a>
+              </div>
+            </div>
+
+            {/* Regenerate Email Confirm */}
+            <Dialog open={regenEmailConfirm} onOpenChange={setRegenEmailConfirm}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="text-amber-600">Regenerate Email Address?</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-slate-600 py-2">This will generate a new lead delivery email. The old address will stop working. Update all vendor configurations.</p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRegenEmailConfirm(false)}>Cancel</Button>
+                  <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={handleRegenEmail}>Regenerate</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Lead Distribution Tab */}

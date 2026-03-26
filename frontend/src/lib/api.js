@@ -123,4 +123,15 @@ export const generateInvoiceFromOrder = (orderId, invoiceType = 'customer') =>
   api.post(`/orders/${orderId}/generate-invoice?invoice_type=${invoiceType}`);
 export const signInvoice = (invoiceId, data) => api.post(`/invoices/${invoiceId}/sign`, data);
 
+// Lead Email Settings
+export const getLeadEmail = () => api.get('/settings/lead-email');
+export const regenerateLeadEmail = () => api.post('/settings/lead-email/regenerate');
+
+// Reminders
+export const createReminder = (data) => api.post('/reminders', data);
+export const getReminders = (params = {}) => api.get('/reminders', { params });
+export const getTodayReminders = () => api.get('/reminders/today');
+export const updateReminder = (id, data) => api.put(`/reminders/${id}`, data);
+export const deleteReminder = (id) => api.delete(`/reminders/${id}`);
+
 export default api;

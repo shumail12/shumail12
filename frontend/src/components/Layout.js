@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   FileSignature,
   CircleDollarSign,
+  Calendar,
 } from 'lucide-react';
 
 const getNavigation = (isSuperAdmin) => {
@@ -32,6 +33,7 @@ const getNavigation = (isSuperAdmin) => {
     { name: 'Orders', href: '/orders', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
     { name: 'Agreements', href: '/agreements', icon: FileSignature },
+    { name: 'Reminders', href: '/reminders', icon: Calendar },
     { name: 'Chat', href: '/chat', icon: MessageSquare },
   ];
   if (isSuperAdmin) {

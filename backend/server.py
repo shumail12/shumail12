@@ -2017,6 +2017,207 @@ async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_ve
     return {"status": "success", "message": "Lead received", "quote_number": quote_number, "quote_id": quote_doc["id"]}
 
 
+# ==================== EMAIL LEAD DELIVERY ====================
+
+@api_router.get("/settings/lead-email")
+async def get_lead_email(current_user: User = Depends(require_superadmin)):
+    doc = await db.settings.find_one({"_id": "lead_delivery_email"})
+    if not doc:
+        email_id = str(uuid.uuid4())
+        email_addr = f"{email_id}@leads.breamway.com"
+        await db.settings.insert_one({"_id": "lead_delivery_email", "email": email_addr, "email_id": email_id})
+        return {"email": email_addr, "email_id": email_id}
+    return {"email": doc["email"], "email_id": doc.get("email_id", "")}
+
+@api_router.post("/settings/lead-email/regenerate")
+async def regenerate_lead_email(current_user: User = Depends(require_superadmin)):
+    email_id = str(uuid.uuid4())
+    email_addr = f"{email_id}@leads.breamway.com"
+    await db.settings.update_one({"_id": "lead_delivery_email"}, {"$set": {"email": email_addr, "email_id": email_id}}, upsert=True)
+    return {"email": email_addr, "email_id": email_id}
+
+@api_router.post("/leads/email-incoming")
+async def receive_email_lead(request: Request, _: bool = Depends(verify_vendor_key)):
+    """Parse plain-text email format and create a lead.
+    Accepts both JSON with 'body' key or raw text body."""
+    content_type = request.headers.get("content-type", "")
+    if "json" in content_type:
+        data = await request.json()
+        body = data.get("body", "")
+    else:
+        body = (await request.body()).decode("utf-8", errors="ignore")
+
+    # Parse key: value pairs
+    fields = {}
+    for line in body.split("\n"):
+        line = line.strip()
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fields[key.strip().lower()] = val.strip()
+
+    name = fields.get("name", "Unknown")
+    p_city = fields.get("pickup city", "")
+    p_state = fields.get("pickup state", "")
+    p_zip = fields.get("pickup zip", "")
+    d_city = fields.get("delivery city", "")
+    d_state = fields.get("delivery state", "")
+    d_zip = fields.get("delivery zip", "")
+    v_year = fields.get("year", "")
+    v_make = fields.get("make", "")
+    v_model = fields.get("model", "")
+    pickup_date = fields.get("pickup date", fields.get("date", ""))
+    running = fields.get("running", "")
+    email = fields.get("email", "")
+    phone = fields.get("phone", "")
+    phone2 = fields.get("phone 2", "")
+    notes = fields.get("notes", "")
+    source_id = fields.get("lead source id#", fields.get("lead source id", ""))
+    source = fields.get("source", source_id or "email")
+
+    assigned_agent = await distribute_lead(source)
+    quote_number = await get_next_quote_number()
+    quote_doc = {
+        "id": str(uuid.uuid4()), "quote_number": quote_number,
+        "agent_name": assigned_agent, "customer_name": name,
+        "phone": phone, "phone2": phone2, "email": email,
+        "vehicle_year": str(v_year), "vehicle_make": str(v_make), "vehicle_model": str(v_model),
+        "pickup_address": f"{p_city}, {p_state}".strip(", "),
+        "pickup_city": p_city, "pickup_state": p_state, "pickup_zip": p_zip,
+        "delivery_address": f"{d_city}, {d_state}".strip(", "),
+        "delivery_city": d_city, "delivery_state": d_state, "delivery_zip": d_zip,
+        "pickup_date": pickup_date, "running": running,
+        "shipping_type": "standard", "price": 0, "deposit_fee": 150, "carrier_fee": 0,
+        "source": source, "lead_source_id": source_id,
+        "status": "lead", "notes": notes,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.quotes.insert_one(quote_doc)
+    quote_doc.pop("_id", None)
+
+    await db.api_logs.insert_one({
+        "type": "email_lead_intake", "source": source, "quote_number": quote_number,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    vehicle_str = " ".join(filter(None, [str(v_year), str(v_make), str(v_model)]))
+    route_str = f"{p_city or '?'} -> {d_city or '?'}"
+    notif_doc = {
+        "id": str(uuid.uuid4()), "type": "new_lead", "title": "New Lead (Email)",
+        "message": f"{name} - {vehicle_str} - {route_str}",
+        "quote_id": quote_doc["id"], "quote_number": quote_number,
+        "customer_name": name, "route": route_str, "vehicle": vehicle_str,
+        "is_read": False, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one(notif_doc)
+    notif_doc.pop("_id", None)
+    await sse_manager.broadcast("new_lead", {"notification": notif_doc, "quote": quote_doc})
+
+    return {"status": "success", "message": "Email lead received", "quote_number": quote_number, "quote_id": quote_doc["id"]}
+
+
+# ==================== REMINDER CALENDAR ====================
+
+class ReminderInput(BaseModel):
+    title: str
+    notes: str = ""
+    reminder_date: str  # YYYY-MM-DD
+    reminder_type: str = "custom"  # pickup, dispatch, follow_up, custom
+    order_id: Optional[str] = None
+    order_number: Optional[str] = None
+    lead_id: Optional[str] = None
+    quote_number: Optional[str] = None
+
+class ReminderUpdateInput(BaseModel):
+    title: Optional[str] = None
+    notes: Optional[str] = None
+    reminder_date: Optional[str] = None
+    reminder_type: Optional[str] = None
+    status: Optional[str] = None
+    order_id: Optional[str] = None
+    order_number: Optional[str] = None
+
+@api_router.post("/reminders")
+async def create_reminder(data: ReminderInput, current_user: User = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current_user.id,
+        "user_name": current_user.full_name,
+        "title": data.title,
+        "notes": data.notes,
+        "reminder_date": data.reminder_date,
+        "reminder_type": data.reminder_type,
+        "order_id": data.order_id or "",
+        "order_number": data.order_number or "",
+        "lead_id": data.lead_id or "",
+        "quote_number": data.quote_number or "",
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.reminders.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.get("/reminders")
+async def get_reminders(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    is_admin = current_user.role in ("superadmin", "admin")
+    query = {}
+    if not is_admin:
+        query["user_id"] = current_user.id
+    elif user_id:
+        query["user_id"] = user_id
+    if start_date:
+        query.setdefault("reminder_date", {})["$gte"] = start_date
+    if end_date:
+        query.setdefault("reminder_date", {})["$lte"] = end_date
+    if status:
+        query["status"] = status
+    docs = await db.reminders.find(query, {"_id": 0}).sort("reminder_date", 1).to_list(500)
+    return {"reminders": docs, "total": len(docs)}
+
+@api_router.get("/reminders/today")
+async def get_today_reminders(current_user: User = Depends(get_current_user)):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    is_admin = current_user.role in ("superadmin", "admin")
+    query = {"reminder_date": today}
+    if not is_admin:
+        query["user_id"] = current_user.id
+    docs = await db.reminders.find(query, {"_id": 0}).to_list(200)
+    return {"reminders": docs, "date": today}
+
+@api_router.put("/reminders/{reminder_id}")
+async def update_reminder(reminder_id: str, data: ReminderUpdateInput, current_user: User = Depends(get_current_user)):
+    existing = await db.reminders.find_one({"id": reminder_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Reminder not found")
+    is_admin = current_user.role in ("superadmin", "admin")
+    if not is_admin and existing["user_id"] != current_user.id:
+        raise HTTPException(403, "Cannot edit other users' reminders")
+    update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.reminders.update_one({"id": reminder_id}, {"$set": update_dict})
+    updated = await db.reminders.find_one({"id": reminder_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/reminders/{reminder_id}")
+async def delete_reminder(reminder_id: str, current_user: User = Depends(get_current_user)):
+    existing = await db.reminders.find_one({"id": reminder_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Reminder not found")
+    is_admin = current_user.role in ("superadmin", "admin")
+    if not is_admin and existing["user_id"] != current_user.id:
+        raise HTTPException(403, "Cannot delete other users' reminders")
+    await db.reminders.delete_one({"id": reminder_id})
+    return {"message": "Reminder deleted"}
+
+
 # ==================== ADMIN CONTROL PANEL ====================
 
 @api_router.get("/admin/api-logs")
