@@ -134,4 +134,7 @@ export const getTodayReminders = () => api.get('/reminders/today');
 export const updateReminder = (id, data) => api.put(`/reminders/${id}`, data);
 export const deleteReminder = (id) => api.delete(`/reminders/${id}`);
 
+// Sidebar badge counts
+export const getSidebarCounts = () => api.get('/sidebar/counts');
+
 export default api;

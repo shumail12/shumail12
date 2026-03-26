@@ -10,17 +10,16 @@ export const NotificationProvider = ({ children }) => {
   const { token, user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [sidebarCounts, setSidebarCounts] = useState({ new_leads: 0, unread_chat: 0 });
   const eventSourceRef = useRef(null);
   const audioRef = useRef(null);
   const API = process.env.REACT_APP_BACKEND_URL;
 
-  // Initialize notification sound
   useEffect(() => {
     audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Mi4x4aGR0gI2RjYF1bHJ+i5GPiYB1cHeCjZGOhXtxcn+JjZCIgHdyc3+IjJCJgXhzc4CIjJCJgnp0dICIjJCJg3t0dICIjI+Ig3t0dICIi4+Ig3t0dICIi46Hg3t0dICHi46Gg3t0dICHi46Gg3t0dICHi42Fg3t0dICHi42Eg3t1dYGHi42Eg3t1dYGIi42Eg3x1dYGIi42Dg3x1dYGIi42Dg3x1doKIi42Dg3x1doKIi4yDhHx1doKIi4yDhHx1doKIi4yCg3x1doKIiouCg3x2d4OJiouBgnx2d4OJiouBgnx2d4OJiouBgnx2d4OJiYuBgnx2d4OIiYqAgXt2d4OIiIp/gXt2d4OIiIp/gXt2eIOIiIl/gHt3eIOHiIl+gHt3eIOHh4h+gHt3eIOHh4h+gHt3eIOHh4h+gHt3eIOHh4h+gHt3eIOHh4h+gHt3eIOHh4d9f3p3eYOGh4d9f3p3eYOGh4d9f3p3eYOGhod8f3p3eYKGhod8f3p4eoKGhod8f3p4eoKFhoZ7fnp4eoKFhYV6fnl4eoKFhYV6fXl5e4OFhYV5fXl5e4OAAIA=');
     audioRef.current.volume = 0.5;
   }, []);
 
-  // Fetch existing notifications
   const fetchNotifications = useCallback(async () => {
     if (!token) return;
     try {
@@ -37,11 +36,28 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [token, API]);
 
-  // SSE connection
+  const fetchSidebarCounts = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/sidebar/counts`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSidebarCounts(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sidebar counts:', err);
+    }
+  }, [token, API]);
+
   useEffect(() => {
     if (!token || !user) return;
 
     fetchNotifications();
+    fetchSidebarCounts();
+
+    const pollInterval = setInterval(fetchSidebarCounts, 15000);
 
     const connectSSE = () => {
       const url = `${API}/api/notifications/stream?token=${token}`;
@@ -53,16 +69,14 @@ export const NotificationProvider = ({ children }) => {
           const data = JSON.parse(event.data);
           if (data.type === 'new_lead') {
             const notif = data.notification;
-            // Add to state
             setNotifications(prev => [notif, ...prev]);
             setUnreadCount(prev => prev + 1);
+            fetchSidebarCounts();
 
-            // Play sound
             if (audioRef.current) {
               audioRef.current.play().catch(() => {});
             }
 
-            // Show toast popup
             toast.custom((t) => (
               <div className="bg-white rounded-xl shadow-2xl border border-blue-200 p-4 w-[380px] animate-in slide-in-from-right">
                 <div className="flex items-start gap-3">
@@ -92,6 +106,9 @@ export const NotificationProvider = ({ children }) => {
               </div>
             ), { duration: 15000, position: 'top-right' });
           }
+          if (data.type === 'chat_message') {
+            fetchSidebarCounts();
+          }
         } catch (err) {
           console.error('SSE parse error:', err);
         }
@@ -99,7 +116,6 @@ export const NotificationProvider = ({ children }) => {
 
       es.onerror = () => {
         es.close();
-        // Reconnect after 5 seconds
         setTimeout(connectSSE, 5000);
       };
     };
@@ -107,11 +123,12 @@ export const NotificationProvider = ({ children }) => {
     connectSSE();
 
     return () => {
+      clearInterval(pollInterval);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
     };
-  }, [token, user, API, fetchNotifications]);
+  }, [token, user, API, fetchNotifications, fetchSidebarCounts]);
 
   const markAsRead = async (notifId) => {
     try {
@@ -140,7 +157,7 @@ export const NotificationProvider = ({ children }) => {
   };
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllRead, fetchNotifications }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllRead, fetchNotifications, sidebarCounts, fetchSidebarCounts }}>
       {children}
     </NotificationContext.Provider>
   );

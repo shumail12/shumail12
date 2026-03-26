@@ -1109,6 +1109,12 @@ async def get_lead(lead_id: str, current_user: User = Depends(get_current_user))
         lead = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    # Mark as seen by current user
+    if lead.get("status") == "lead":
+        await db.quotes.update_one(
+            {"id": lead_id},
+            {"$addToSet": {"seen_by": current_user.id}}
+        )
     return lead
 
 @api_router.put("/leads/{lead_id}")
@@ -1989,6 +1995,7 @@ async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_ve
         "lead_source_id": data.lead_source_id or "",
         "status": "lead",
         "notes": data.notes or "",
+        "seen_by": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -2089,6 +2096,7 @@ async def receive_email_lead(request: Request, _: bool = Depends(verify_vendor_k
         "shipping_type": "standard", "price": 0, "deposit_fee": 150, "carrier_fee": 0,
         "source": source, "lead_source_id": source_id,
         "status": "lead", "notes": notes,
+        "seen_by": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -2462,6 +2470,150 @@ async def notification_stream(request: Request, token: str = ""):
         "Cache-Control": "no-cache", "Connection": "keep-alive",
         "X-Accel-Buffering": "no",  # Disable nginx buffering
     })
+
+
+# ==================== SIDEBAR BADGE COUNTS ====================
+
+@api_router.get("/sidebar/counts")
+async def get_sidebar_counts(current_user: User = Depends(get_current_user)):
+    """Get unread counts for sidebar badges: new leads + unread chat messages."""
+    is_admin = current_user.role in ("superadmin", "admin")
+
+    # Count new leads not yet seen by this user
+    lead_query = {"status": "lead", "seen_by": {"$nin": [current_user.id]}}
+    if not is_admin:
+        lead_query["$or"] = [
+            {"assigned_to_id": current_user.id},
+            {"assigned_to_id": {"$exists": False}},
+            {"assigned_to_id": None},
+            {"assigned_to_id": ""},
+        ]
+    new_leads_count = await db.quotes.count_documents(lead_query)
+
+    # Count total unread chat messages for this user across all channels
+    unread_chat_count = await db.chat_messages.count_documents({
+        "sender_id": {"$ne": current_user.id},
+        "is_read": False,
+    })
+
+    return {"new_leads": new_leads_count, "unread_chat": unread_chat_count}
+
+
+# ==================== SENDGRID INBOUND PARSE WEBHOOK ====================
+
+@api_router.post("/leads/email-webhook")
+async def receive_sendgrid_email(request: Request):
+    """Public webhook for SendGrid Inbound Parse. No auth required.
+    SendGrid posts multipart/form-data with fields: from, to, subject, text, html, etc."""
+    try:
+        form = await request.form()
+    except Exception:
+        # Fallback: try JSON
+        try:
+            form = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Could not parse request body")
+
+    # Extract SendGrid Inbound Parse fields
+    sender = form.get("from", "") or form.get("sender", "")
+    subject = form.get("subject", "")
+    text_body = form.get("text", "") or form.get("body", "")
+    html_body = form.get("html", "")
+    to_addr = form.get("to", "")
+
+    # Use plain text body to extract lead data (key: value format)
+    body = str(text_body) if text_body else ""
+    if not body and html_body:
+        import re
+        body = re.sub(r'<[^>]+>', '\n', str(html_body))
+
+    # Parse key: value pairs from body
+    fields = {}
+    for line in body.split("\n"):
+        line = line.strip()
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fields[key.strip().lower()] = val.strip()
+
+    name = fields.get("name", fields.get("customer name", ""))
+    if not name and sender:
+        # Extract name from email sender "Name <email>" format
+        import re
+        match = re.match(r'^([^<]+)', str(sender))
+        name = match.group(1).strip() if match else str(sender).split("@")[0]
+
+    p_city = fields.get("pickup city", fields.get("origin city", ""))
+    p_state = fields.get("pickup state", fields.get("origin state", ""))
+    p_zip = fields.get("pickup zip", fields.get("origin zip", ""))
+    d_city = fields.get("delivery city", fields.get("destination city", ""))
+    d_state = fields.get("delivery state", fields.get("destination state", ""))
+    d_zip = fields.get("delivery zip", fields.get("destination zip", ""))
+    v_year = fields.get("year", fields.get("vehicle year", ""))
+    v_make = fields.get("make", fields.get("vehicle make", ""))
+    v_model = fields.get("model", fields.get("vehicle model", ""))
+    pickup_date = fields.get("pickup date", fields.get("date", ""))
+    running = fields.get("running", fields.get("condition", ""))
+    email = fields.get("email", "")
+    phone = fields.get("phone", fields.get("phone number", ""))
+    phone2 = fields.get("phone 2", "")
+    notes = fields.get("notes", "")
+    source_id = fields.get("lead source id#", fields.get("lead source id", fields.get("source id", "")))
+    source = fields.get("source", source_id or "email")
+
+    # If no email extracted from body, try sender email
+    if not email and sender:
+        import re
+        email_match = re.search(r'[\w.+-]+@[\w.-]+\.\w+', str(sender))
+        if email_match:
+            email = email_match.group(0)
+
+    # If no structured data at all, store subject + body as notes
+    if not name and not p_city and not v_make:
+        name = subject or "Email Lead"
+        notes = body[:2000] if body else f"Subject: {subject}"
+
+    assigned_agent = await distribute_lead(source)
+    quote_number = await get_next_quote_number()
+    quote_doc = {
+        "id": str(uuid.uuid4()), "quote_number": quote_number,
+        "agent_name": assigned_agent, "customer_name": name or "Email Lead",
+        "phone": phone, "phone2": phone2, "email": email,
+        "vehicle_year": str(v_year), "vehicle_make": str(v_make), "vehicle_model": str(v_model),
+        "pickup_address": f"{p_city}, {p_state}".strip(", "),
+        "pickup_city": p_city, "pickup_state": p_state, "pickup_zip": p_zip,
+        "delivery_address": f"{d_city}, {d_state}".strip(", "),
+        "delivery_city": d_city, "delivery_state": d_state, "delivery_zip": d_zip,
+        "pickup_date": pickup_date, "running": running,
+        "shipping_type": "standard", "price": 0, "deposit_fee": 150, "carrier_fee": 0,
+        "source": source, "lead_source_id": source_id,
+        "status": "lead", "notes": notes,
+        "seen_by": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.quotes.insert_one(quote_doc)
+    quote_doc.pop("_id", None)
+
+    await db.api_logs.insert_one({
+        "type": "email_webhook_lead", "source": source, "quote_number": quote_number,
+        "sender": str(sender)[:200], "subject": str(subject)[:200],
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    vehicle_str = " ".join(filter(None, [str(v_year), str(v_make), str(v_model)]))
+    route_str = f"{p_city or '?'} -> {d_city or '?'}"
+    notif_doc = {
+        "id": str(uuid.uuid4()), "type": "new_lead", "title": "New Lead (Email)",
+        "message": f"{name} - {vehicle_str} - {route_str}",
+        "quote_id": quote_doc["id"], "quote_number": quote_number,
+        "customer_name": name, "route": route_str, "vehicle": vehicle_str,
+        "is_read": False, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one(notif_doc)
+    notif_doc.pop("_id", None)
+    await sse_manager.broadcast("new_lead", {"notification": notif_doc, "quote": quote_doc})
+
+    return {"status": "success", "message": "Email lead received", "quote_number": quote_number}
 
 
 # ==================== SETUP ====================

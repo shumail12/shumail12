@@ -142,6 +142,7 @@ const AdminPanel = () => {
   const vendorDocsUrl = `${process.env.REACT_APP_BACKEND_URL}/api/vendor/docs`;
   const apiEndpoint = `${process.env.REACT_APP_BACKEND_URL}/api/leads/incoming`;
   const emailEndpoint = `${process.env.REACT_APP_BACKEND_URL}/api/leads/email-incoming`;
+  const emailWebhookUrl = `${process.env.REACT_APP_BACKEND_URL}/api/leads/email-webhook`;
 
   const handleToggleRule = async (rule) => {
     try {
@@ -307,6 +308,25 @@ Lead Source ID#: BR000000`}</pre>
                   </Button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">Send the plain-text body as JSON: <code className="bg-slate-200 px-1 rounded">{"{"}"body": "Name: ...\nPickup City: ..."{"}"}</code></p>
+              </div>
+
+              {/* SendGrid Inbound Parse Webhook */}
+              <div className="mt-4 bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                <h3 className="font-semibold text-emerald-900 text-xs uppercase tracking-wider mb-2">SendGrid Inbound Parse Webhook URL</h3>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-mono font-bold rounded">POST</span>
+                  <code className="text-sm text-emerald-700 font-mono break-all">{emailWebhookUrl}</code>
+                  <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => copyToClipboard(emailWebhookUrl)}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-emerald-700 mt-2 font-medium">Setup Steps:</p>
+                <ol className="text-xs text-slate-600 mt-1 space-y-1 list-decimal list-inside">
+                  <li>Go to SendGrid Dashboard &rarr; Settings &rarr; Inbound Parse</li>
+                  <li>Add this webhook URL for your domain (e.g., leads.breamway.com)</li>
+                  <li>Set MX record for your domain to point to <code className="bg-slate-200 px-1 rounded">mx.sendgrid.net</code></li>
+                  <li>Emails sent to any address @leads.breamway.com will auto-create leads</li>
+                </ol>
               </div>
             </div>
 

@@ -28,13 +28,13 @@ import {
 const getNavigation = (isSuperAdmin) => {
   const baseNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Leads', href: '/leads', icon: Users },
+    { name: 'Leads', href: '/leads', icon: Users, badgeKey: 'new_leads' },
     { name: 'Quotes', href: '/quotes', icon: FileText },
     { name: 'Orders', href: '/orders', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
     { name: 'Agreements', href: '/agreements', icon: FileSignature },
     { name: 'Reminders', href: '/reminders', icon: Calendar },
-    { name: 'Chat', href: '/chat', icon: MessageSquare },
+    { name: 'Chat', href: '/chat', icon: MessageSquare, badgeKey: 'unread_chat' },
   ];
   if (isSuperAdmin) {
     baseNav.push({ name: 'Users', href: '/users', icon: UserCog });
@@ -47,6 +47,7 @@ const getNavigation = (isSuperAdmin) => {
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
+  const { sidebarCounts } = useNotifications() || {};
   const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'superadmin';
   const navigation = getNavigation(isSuperAdmin);
@@ -65,17 +66,28 @@ export const Sidebar = () => {
       </div>
       <nav className="flex-1 py-6 px-3 overflow-y-auto">
         <ul className="space-y-1">
-          {navigation.map((item) => (
-            <li key={item.name}>
-              <NavLink to={item.href}
-                className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-                data-testid={`nav-${item.name.toLowerCase().replace(' ', '-')}`}>
-                <item.icon className="w-5 h-5" />
-                <span className="flex-1">{item.name}</span>
-                <ChevronRight className="w-4 h-4 opacity-50" />
-              </NavLink>
-            </li>
-          ))}
+          {navigation.map((item) => {
+            const badgeCount = item.badgeKey && sidebarCounts ? sidebarCounts[item.badgeKey] : 0;
+            return (
+              <li key={item.name}>
+                <NavLink to={item.href}
+                  className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                  data-testid={`nav-${item.name.toLowerCase().replace(' ', '-')}`}>
+                  <item.icon className="w-5 h-5" />
+                  <span className="flex-1">{item.name}</span>
+                  {badgeCount > 0 && (
+                    <span
+                      className="min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse"
+                      data-testid={`badge-${item.badgeKey}`}
+                    >
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
+                  {!badgeCount && <ChevronRight className="w-4 h-4 opacity-50" />}
+                </NavLink>
+              </li>
+            );
+          })}
         </ul>
       </nav>
       <div className="p-4 border-t border-slate-800">
@@ -108,7 +120,6 @@ const NotificationBell = () => {
   const panelRef = useRef(null);
   const navigate = useNavigate();
 
-  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
