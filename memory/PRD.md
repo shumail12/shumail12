@@ -22,29 +22,37 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - SSE-based real-time notifications, Vendor Lead Intake API
 
 ### Phase 3 - Chat, Admin Panel, Agreements (DONE)
-- Internal Chat (1-on-1, Team, Groups, File Upload), Admin Control Panel, Agreement/Contract System with digital signature
+- Internal Chat (1-on-1, Team, Groups, File Upload), Admin Control Panel, Agreement/Contract System
 
 ### Phase 4 - Pricing Engine & Route Intelligence (DONE)
-- Editable 3-tier Pricing (Standard/Expedited/Enclosed), Auto-calculation, Distance Estimation, USA Route Map, Route Intelligence
+- 3-tier Pricing, Auto-calculation, Distance Estimation, USA Route Map, Route Intelligence
 
 ### Phase 5 - Revenue Tracking & User-Specific Leads (DONE)
-- User-specific leads, Revenue Form, Revenue Dashboard, Dashboard Revenue Targets, Payment Methods
+- User-specific leads, Revenue Form, Revenue Dashboard, Revenue Targets, Payment Methods
 
-### Phase 6 - Advanced Invoice/Agreement System & UX (DONE)
-- Customer & Carrier Invoices (Breamway-branded, print-ready), Auto Logout (30-min), Motivational Popup
+### Phase 6 - Invoice/Agreement System & UX (DONE)
+- Customer & Carrier Invoices (Breamway-branded), Auto Logout (30-min), Motivational Popup
 
-### Phase 7 - Superadmin Full Edit Control & Speed (DONE)
-- Superadmin Invoice Editor (Canva-style: header, DOT#, title, terms editable), Superadmin Order Editor (customer/vehicle/location), Signed Invoice Protection, Chat SSE Reconnection
+### Phase 7 - Superadmin Full Edit Control (DONE)
+- Canva-style Invoice Editor, Superadmin Order Editor, Signed Invoice Protection, Chat SSE Fix
 
-### Phase 8 - Revenue Enhancement System (DONE - March 25, 2026)
-- **Superadmin Edit Revenue**: Edit deposit, payment method, customer name, notes on any revenue entry
-- **Superadmin Delete Revenue**: Remove incorrect entries with confirmation dialog
-- **Monthly Revenue Reset**: Dashboard progress bar shows CURRENT MONTH only. Old data fully preserved.
-- **Monthly Revenue History**: Month-by-month breakdown cards showing total, count, per-user performance
-- **Month Filter**: Revenue admin summary filterable by month (YYYY-MM)
-- **User Filter on History**: Filter monthly history by specific user
-- **Dashboard Month Label**: Revenue target shows current month name (e.g., "March 2026")
-- **Instant Updates**: Edit/delete immediately refreshes all dashboard totals and reports
+### Phase 8 - Revenue Enhancement (DONE)
+- Superadmin Edit/Delete Revenue, Monthly Reset, Monthly History, Month/User Filters
+
+### Phase 9 - Vendor API Fix (DONE - March 25, 2026)
+- **Root cause**: `/api/leads/specs` was registered AFTER `/api/leads/{lead_id}`, causing FastAPI to match `specs` as a lead_id parameter and return 401/403
+- **Fix**: Moved specs endpoint BEFORE the parameterized route
+- **New**: `/api/vendor/docs` — Professional HTML documentation page (public, no auth) with:
+  - API endpoint, authentication section with API key
+  - All request fields reference table
+  - cURL example with copy button
+  - Success/error response examples
+  - Breamway branding
+- **Verified**: Lead submission via API works end-to-end (tested with cURL)
+- **URLs for vendor**:
+  - Docs page: `{base_url}/api/vendor/docs`
+  - JSON specs: `{base_url}/api/leads/specs`
+  - Lead POST endpoint: `{base_url}/api/leads/incoming`
 
 ## Prioritized Backlog
 
@@ -59,15 +67,4 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 ### P3 - Deferred
 - Central Dispatch API Integration
 - Route cost comparison dashboard
-
-### Refactoring
-- Break `server.py` (~2100+ lines) into modular routers/models
-
-## Key API Endpoints
-- `PUT /api/revenue/{id}` (superadmin edit revenue)
-- `DELETE /api/revenue/{id}` (superadmin delete revenue)
-- `GET /api/revenue/monthly-history` (month-by-month breakdown)
-- `GET /api/revenue/admin/summary?month=YYYY-MM` (filtered admin summary)
-- `GET /api/dashboard/stats` (current month revenue for target)
-- `POST /api/orders/{order_id}/generate-invoice?invoice_type=customer|carrier`
-- `PUT /api/invoices/{invoice_id}` (admin/superadmin, branding+all fields)
+- server.py refactoring (~2200+ lines)

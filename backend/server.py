@@ -909,6 +909,194 @@ async def get_leads(
     leads = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     return {"leads": leads, "total": total}
 
+# Public specs - NO AUTH required (MUST be before /leads/{lead_id} to avoid route collision)
+@api_router.get("/leads/specs")
+async def get_lead_posting_specs():
+    """Public API documentation for vendors - no login required"""
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    api_key = key_doc["key"] if key_doc else "CONTACT_ADMIN"
+    base_url = os.environ.get("REACT_APP_BACKEND_URL", "")
+    return {
+        "endpoint": f"{base_url}/api/leads/incoming",
+        "method": "POST",
+        "content_type": "application/json",
+        "authentication": {"type": "API Key", "header": "X-API-Key", "key": api_key},
+        "required_fields": ["name"],
+        "all_fields": {
+            "name": "Customer Name (required)",
+            "phone": "Phone Number", "phone2": "Phone 2 (alternate)",
+            "email": "Email Address",
+            "vehicle_year": "Vehicle Year", "vehicle_make": "Vehicle Make", "vehicle_model": "Vehicle Model",
+            "vehicle": "OR pass as object: {year, make, model}",
+            "pickup": "Pickup Location (e.g. 'Los Angeles, CA')",
+            "pickup_city": "Pickup City", "pickup_state": "Pickup State", "pickup_zip": "Pickup Zip",
+            "delivery": "Delivery Location (e.g. 'Houston, TX')",
+            "delivery_city": "Delivery City", "delivery_state": "Delivery State", "delivery_zip": "Delivery Zip",
+            "pickup_date": "Pickup Date", "date": "Alias for pickup_date",
+            "running": "Running condition (yes/no)",
+            "lead_source_id": "Lead Source ID",
+            "source": "Source name (e.g. TOLM, CarrierSoft)",
+            "notes": "Additional notes",
+        },
+        "sample_request": {
+            "name": "John Doe", "phone": "1234567890", "phone2": "9876543210",
+            "email": "john@example.com",
+            "vehicle_year": "2020", "vehicle_make": "Toyota", "vehicle_model": "Camry",
+            "pickup_city": "Los Angeles", "pickup_state": "CA", "pickup_zip": "90001",
+            "delivery_city": "Houston", "delivery_state": "TX", "delivery_zip": "77001",
+            "pickup_date": "2026-02-15", "running": "yes",
+            "lead_source_id": "TOLM-12345", "source": "TOLM",
+            "notes": "Customer prefers morning pickup"
+        },
+        "sample_response_success": {"status": "success", "message": "Lead received", "quote_number": "BR040001"},
+        "sample_response_error": {"detail": "Invalid API key"},
+    }
+
+from fastapi.responses import HTMLResponse
+
+@api_router.get("/vendor/docs", response_class=HTMLResponse)
+async def vendor_api_docs():
+    """Public HTML documentation page for vendors"""
+    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
+    api_key = key_doc["key"] if key_doc else "CONTACT_ADMIN"
+    base_url = os.environ.get("REACT_APP_BACKEND_URL", "")
+    endpoint = f"{base_url}/api/leads/incoming"
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breamway Auto Transport - Lead API Documentation</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;line-height:1.6}}
+.container{{max-width:900px;margin:0 auto;padding:32px 24px}}
+.header{{text-align:center;padding:48px 0 32px;border-bottom:1px solid #1e293b;margin-bottom:32px}}
+.header h1{{font-size:28px;font-weight:800;color:#fff;margin-bottom:8px}}
+.header p{{color:#94a3b8;font-size:14px}}
+.badge{{display:inline-block;background:#059669;color:#fff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;margin-top:12px}}
+.section{{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;margin-bottom:20px}}
+.section h2{{font-size:16px;font-weight:700;color:#f1f5f9;margin-bottom:16px;display:flex;align-items:center;gap:8px}}
+.section h2 .dot{{width:8px;height:8px;border-radius:50%;background:#3b82f6}}
+.key-box{{background:#0f172a;border:2px dashed #f59e0b;border-radius:8px;padding:16px;text-align:center;margin:12px 0}}
+.key-box .label{{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#f59e0b;margin-bottom:6px}}
+.key-box code{{font-size:18px;font-weight:700;color:#fbbf24;font-family:'Courier New',monospace;letter-spacing:1px}}
+.endpoint-box{{background:#0f172a;border-radius:8px;padding:16px;margin:12px 0;display:flex;align-items:center;gap:12px}}
+.method{{background:#3b82f6;color:#fff;font-size:12px;font-weight:800;padding:4px 10px;border-radius:4px}}
+.url{{color:#60a5fa;font-family:'Courier New',monospace;font-size:14px;word-break:break-all}}
+table{{width:100%;border-collapse:collapse;margin:12px 0}}
+th{{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;padding:8px 12px;border-bottom:1px solid #334155}}
+td{{padding:8px 12px;border-bottom:1px solid #1e293b;font-size:13px}}
+td:first-child{{font-family:'Courier New',monospace;color:#60a5fa;font-weight:600;white-space:nowrap}}
+td:last-child{{color:#cbd5e1}}
+.required{{color:#f87171;font-size:10px;font-weight:700;margin-left:4px}}
+pre{{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;overflow-x:auto;font-size:12px;line-height:1.8;color:#e2e8f0;margin:12px 0}}
+.copy-btn{{background:#334155;color:#94a3b8;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;float:right;margin-bottom:8px}}
+.copy-btn:hover{{background:#475569;color:#fff}}
+.success{{color:#4ade80}}.error{{color:#f87171}}
+.footer{{text-align:center;padding:32px 0;color:#475569;font-size:12px;border-top:1px solid #1e293b;margin-top:32px}}
+</style></head><body>
+<div class="container">
+<div class="header">
+<h1>Breamway Auto Transport</h1>
+<p>Shumail Technologies LLC &mdash; USDOT# 4246498 | MC# 1622825</p>
+<div class="badge">Lead Intake API v2.0</div>
+</div>
+
+<div class="section">
+<h2><span class="dot"></span> API Endpoint</h2>
+<div class="endpoint-box">
+<span class="method">POST</span>
+<span class="url">{endpoint}</span>
+</div>
+<p style="font-size:13px;color:#94a3b8;margin-top:8px">Content-Type: <code style="color:#60a5fa">application/json</code></p>
+</div>
+
+<div class="section">
+<h2><span class="dot" style="background:#f59e0b"></span> Authentication</h2>
+<p style="font-size:13px;color:#94a3b8;margin-bottom:12px">Include this API key in your request header:</p>
+<div class="key-box">
+<div class="label">X-API-Key Header</div>
+<code>{api_key}</code>
+</div>
+</div>
+
+<div class="section">
+<h2><span class="dot" style="background:#8b5cf6"></span> Request Fields</h2>
+<table>
+<thead><tr><th>Field</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>name <span class="required">REQUIRED</span></td><td>Customer full name</td></tr>
+<tr><td>phone</td><td>Phone number</td></tr>
+<tr><td>phone2</td><td>Alternate phone number</td></tr>
+<tr><td>email</td><td>Email address</td></tr>
+<tr><td>vehicle_year</td><td>Vehicle year (e.g. "2020")</td></tr>
+<tr><td>vehicle_make</td><td>Vehicle make (e.g. "Toyota")</td></tr>
+<tr><td>vehicle_model</td><td>Vehicle model (e.g. "Camry")</td></tr>
+<tr><td>pickup_city</td><td>Pickup city</td></tr>
+<tr><td>pickup_state</td><td>Pickup state (2-letter code)</td></tr>
+<tr><td>pickup_zip</td><td>Pickup zip code</td></tr>
+<tr><td>pickup</td><td>OR: Full pickup location (e.g. "Los Angeles, CA")</td></tr>
+<tr><td>delivery_city</td><td>Delivery city</td></tr>
+<tr><td>delivery_state</td><td>Delivery state (2-letter code)</td></tr>
+<tr><td>delivery_zip</td><td>Delivery zip code</td></tr>
+<tr><td>delivery</td><td>OR: Full delivery location (e.g. "Houston, TX")</td></tr>
+<tr><td>pickup_date</td><td>Pickup date (YYYY-MM-DD)</td></tr>
+<tr><td>running</td><td>"yes" or "no"</td></tr>
+<tr><td>source</td><td>Lead source name (e.g. "TOLM", "CarrierSoft")</td></tr>
+<tr><td>lead_source_id</td><td>Your internal lead ID for tracking</td></tr>
+<tr><td>notes</td><td>Additional notes or instructions</td></tr>
+</tbody></table>
+</div>
+
+<div class="section">
+<h2><span class="dot" style="background:#10b981"></span> cURL Example</h2>
+<button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('curl-code').innerText)">Copy</button>
+<pre id="curl-code">curl -X POST "{endpoint}" \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: {api_key}" \\
+  -d '{{
+    "name": "John Doe",
+    "phone": "1234567890",
+    "email": "john@example.com",
+    "vehicle_year": "2020",
+    "vehicle_make": "Toyota",
+    "vehicle_model": "Camry",
+    "pickup_city": "Los Angeles",
+    "pickup_state": "CA",
+    "pickup_zip": "90001",
+    "delivery_city": "Houston",
+    "delivery_state": "TX",
+    "delivery_zip": "77001",
+    "pickup_date": "2026-04-15",
+    "running": "yes",
+    "source": "TOLM",
+    "notes": "Customer prefers morning pickup"
+  }}'</pre>
+</div>
+
+<div class="section">
+<h2><span class="dot" style="background:#10b981"></span> Success Response <span style="font-size:12px;color:#4ade80;font-weight:400">(200 OK)</span></h2>
+<pre class="success">{{
+  "status": "success",
+  "message": "Lead received",
+  "quote_number": "BR040001",
+  "quote_id": "abc123-def456"
+}}</pre>
+</div>
+
+<div class="section">
+<h2><span class="dot" style="background:#ef4444"></span> Error Responses</h2>
+<pre class="error">// 401 - Invalid API Key
+{{ "detail": "Invalid API key" }}
+
+// 422 - Missing required field
+{{ "detail": [ {{ "msg": "field required", "type": "value_error.missing" }} ] }}</pre>
+</div>
+
+<div class="footer">
+<p>&copy; 2026 Breamway Auto Transport &mdash; Shumail Technologies LLC</p>
+<p style="margin-top:4px">Questions? Contact your Breamway account representative.</p>
+</div>
+</div></body></html>"""
+
 @api_router.get("/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: User = Depends(get_current_user)):
     lead = await db.quotes.find_one({"id": lead_id, "status": "lead"}, {"_id": 0})
@@ -1822,50 +2010,6 @@ async def receive_vendor_lead(data: VendorLeadInput, _: bool = Depends(verify_ve
     await sse_manager.broadcast("new_lead", {"notification": notif_doc, "quote": quote_doc})
 
     return {"status": "success", "message": "Lead received", "quote_number": quote_number, "quote_id": quote_doc["id"]}
-
-
-# Public specs - NO AUTH required
-@api_router.get("/leads/specs")
-async def get_lead_posting_specs():
-    """Public API documentation for vendors - no login required"""
-    key_doc = await db.settings.find_one({"_id": "vendor_api_key"})
-    api_key = key_doc["key"] if key_doc else "CONTACT_ADMIN"
-    base_url = os.environ.get("REACT_APP_BACKEND_URL", "https://crm.breamway.com")
-    return {
-        "endpoint": f"{base_url}/api/leads/incoming",
-        "method": "POST",
-        "content_type": "application/json",
-        "authentication": {"type": "API Key", "header": "X-API-Key", "key": api_key},
-        "required_fields": ["name"],
-        "all_fields": {
-            "name": "Customer Name (required)",
-            "phone": "Phone Number", "phone2": "Phone 2 (alternate)",
-            "email": "Email Address",
-            "vehicle_year": "Vehicle Year", "vehicle_make": "Vehicle Make", "vehicle_model": "Vehicle Model",
-            "vehicle": "OR pass as object: {year, make, model}",
-            "pickup": "Pickup Location (e.g. 'Los Angeles, CA')",
-            "pickup_city": "Pickup City", "pickup_state": "Pickup State", "pickup_zip": "Pickup Zip",
-            "delivery": "Delivery Location (e.g. 'Houston, TX')",
-            "delivery_city": "Delivery City", "delivery_state": "Delivery State", "delivery_zip": "Delivery Zip",
-            "pickup_date": "Pickup Date", "date": "Alias for pickup_date",
-            "running": "Running condition (yes/no)",
-            "lead_source_id": "Lead Source ID",
-            "source": "Source name (e.g. TOLM, CarrierSoft)",
-            "notes": "Additional notes",
-        },
-        "sample_request": {
-            "name": "John Doe", "phone": "1234567890", "phone2": "9876543210",
-            "email": "john@example.com",
-            "vehicle_year": "2020", "vehicle_make": "Toyota", "vehicle_model": "Camry",
-            "pickup_city": "Los Angeles", "pickup_state": "CA", "pickup_zip": "90001",
-            "delivery_city": "Houston", "delivery_state": "TX", "delivery_zip": "77001",
-            "pickup_date": "2026-02-15", "running": "yes",
-            "lead_source_id": "TOLM-12345", "source": "TOLM",
-            "notes": "Customer prefers morning pickup"
-        },
-        "sample_response_success": {"status": "success", "message": "Lead received", "quote_number": "BR040001"},
-        "sample_response_error": {"detail": "Invalid API key"},
-    }
 
 
 # ==================== ADMIN CONTROL PANEL ====================
