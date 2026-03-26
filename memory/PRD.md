@@ -11,48 +11,41 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 
 ## Credentials
 - Superadmin: `shumail.s` / `HONDA@2026`, Security Answer: `Shark`
+- Vendor API Key: `brw-00ab50ce5fd46030e8ab0be1a4d6d1a6`
 
 ## What's Been Implemented
 
-### Phase 1 - Core CRM (DONE)
-- JWT Auth, Dashboard, Leads -> Quotes -> Orders workflow, Carriers, Invoices, User management
-- Auto-import ~39.8k legacy records from CSV
-
-### Phase 2 - Real-time & Vendor Integration (DONE)
-- SSE-based real-time notifications, Vendor Lead Intake API
-
-### Phase 3 - Chat, Admin Panel, Agreements (DONE)
-- Internal Chat (1-on-1, Team, Groups, File Upload), Admin Control Panel, Agreement/Contract System
-
-### Phase 4 - Pricing Engine & Route Intelligence (DONE)
-- 3-tier Pricing, Auto-calculation, Distance Estimation, USA Route Map, Route Intelligence
-
-### Phase 5 - Revenue Tracking & User-Specific Leads (DONE)
-- User-specific leads, Revenue Form, Revenue Dashboard, Revenue Targets, Payment Methods
-
-### Phase 6 - Invoice/Agreement System & UX (DONE)
-- Customer & Carrier Invoices (Breamway-branded), Auto Logout (30-min), Motivational Popup
-
-### Phase 7 - Superadmin Full Edit Control (DONE)
-- Canva-style Invoice Editor, Superadmin Order Editor, Signed Invoice Protection, Chat SSE Fix
-
-### Phase 8 - Revenue Enhancement (DONE)
-- Superadmin Edit/Delete Revenue, Monthly Reset, Monthly History, Month/User Filters
+### Phase 1-4: Core CRM, Real-time, Chat, Pricing (DONE)
+### Phase 5: Revenue Tracking & User-Specific Leads (DONE)
+### Phase 6: Invoice/Agreement System & UX (DONE)
+### Phase 7: Superadmin Full Edit Control (DONE)
+### Phase 8: Revenue Enhancement (DONE)
 
 ### Phase 9 - Vendor API Fix (DONE - March 25, 2026)
-- **Root cause**: `/api/leads/specs` was registered AFTER `/api/leads/{lead_id}`, causing FastAPI to match `specs` as a lead_id parameter and return 401/403
-- **Fix**: Moved specs endpoint BEFORE the parameterized route
-- **New**: `/api/vendor/docs` — Professional HTML documentation page (public, no auth) with:
-  - API endpoint, authentication section with API key
-  - All request fields reference table
-  - cURL example with copy button
-  - Success/error response examples
-  - Breamway branding
-- **Verified**: Lead submission via API works end-to-end (tested with cURL)
-- **URLs for vendor**:
-  - Docs page: `{base_url}/api/vendor/docs`
-  - JSON specs: `{base_url}/api/leads/specs`
-  - Lead POST endpoint: `{base_url}/api/leads/incoming`
+- Fixed `/api/leads/specs` route ordering (was matching as `{lead_id}`)
+- `/api/leads/incoming` GET → 302 redirect to vendor docs page
+- `/api/vendor/docs` — Professional HTML documentation page (public)
+
+### Phase 10 - Email Lead Delivery & Reminder Calendar (DONE - March 26, 2026)
+- **Email Lead Delivery**:
+  - `@leads.breamway.com` email address generated per CRM instance (UUID-based)
+  - `POST /api/leads/email-incoming` — Parses Breamway plain-text email format into leads
+  - Supports: Name, Pickup/Delivery City/State/Zip, Year/Make/Model, Pickup Date, Running, Email, Phone, Phone2, Notes, Lead Source ID#
+  - Admin Panel shows email address with copy button, regenerate, format template
+  - Admin Panel shows vendor docs link (Copy Link + Open Docs)
+  
+- **Advanced Reminder Calendar**:
+  - Full CRUD: Create, read, update, delete reminders
+  - Types: Pickup, Dispatch, Follow Up, Custom (color-coded)
+  - Calendar grid with month navigation (prev/next month)
+  - Today's Reminders banner — shows all today's reminders prominently at top
+  - Click any calendar day to add a reminder for that date
+  - Link reminders to Order #, Quote #
+  - Admin/Superadmin see ALL agents' reminders with user filter
+  - Regular users see only their own
+  - Mark Done / Mark Pending toggle
+  - Missed reminder highlighting (past date + pending)
+  - Status filter (pending/completed)
 
 ## Prioritized Backlog
 
@@ -63,8 +56,19 @@ CRM for auto transport brokerage company (Shumail Technologies LLC / Breamway Au
 - Automated email follow-up system
 - Twilio SMS Notifications (requires user Twilio API credentials)
 - Email delivery for agreements
+- Actual email server setup for @leads.breamway.com forwarding
 
 ### P3 - Deferred
 - Central Dispatch API Integration
 - Route cost comparison dashboard
-- server.py refactoring (~2200+ lines)
+- server.py refactoring (~2500+ lines)
+
+## Key API Endpoints
+- `POST /api/leads/email-incoming` (parse email-format lead, needs X-API-Key)
+- `POST /api/leads/incoming` (JSON lead intake, needs X-API-Key)
+- `GET /api/settings/lead-email` (get lead delivery email address)
+- `POST /api/settings/lead-email/regenerate` (new email address)
+- `POST/GET/PUT/DELETE /api/reminders` (reminder CRUD)
+- `GET /api/reminders/today` (today's reminders)
+- `GET /api/vendor/docs` (public HTML vendor docs)
+- `GET /api/leads/specs` (public JSON specs)
