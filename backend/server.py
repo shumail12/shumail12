@@ -952,7 +952,7 @@ async def get_lead_posting_specs():
         "sample_response_error": {"detail": "Invalid API key"},
     }
 
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 @api_router.get("/vendor/docs", response_class=HTMLResponse)
 async def vendor_api_docs():
@@ -1096,6 +1096,11 @@ pre{{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;
 <p style="margin-top:4px">Questions? Contact your Breamway account representative.</p>
 </div>
 </div></body></html>"""
+
+@api_router.get("/leads/incoming")
+async def leads_incoming_browser_redirect():
+    """When vendor opens this URL in browser (GET), redirect to docs page"""
+    return RedirectResponse(url="/api/vendor/docs", status_code=302)
 
 @api_router.get("/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: User = Depends(get_current_user)):
