@@ -107,7 +107,39 @@ export const NotificationProvider = ({ children }) => {
             ), { duration: 15000, position: 'top-right' });
           }
           if (data.type === 'chat_message') {
-            fetchSidebarCounts();
+            const msg = data.message;
+            // Only show notification for messages from OTHER users
+            if (msg && msg.sender_id !== user?.id) {
+              fetchSidebarCounts();
+
+              if (audioRef.current) {
+                audioRef.current.play().catch(() => {});
+              }
+
+              toast.custom((t) => (
+                <div className="bg-white rounded-xl shadow-2xl border border-emerald-200 p-4 w-[380px] animate-in slide-in-from-right">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-sm font-bold">{(msg.sender_name || 'U').charAt(0)}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900 text-sm">{msg.sender_name || 'Someone'} sent a message</p>
+                      <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{msg.text || (msg.file_name ? `Sent a file: ${msg.file_name}` : 'New message')}</p>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => { window.location.href = '/chat'; toast.dismiss(t); }}
+                          className="px-3 py-1 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+                          Open Chat
+                        </button>
+                        <button onClick={() => toast.dismiss(t)}
+                          className="px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors">
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ), { duration: 10000, position: 'top-right' });
+            }
           }
         } catch (err) {
           console.error('SSE parse error:', err);

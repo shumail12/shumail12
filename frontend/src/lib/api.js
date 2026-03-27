@@ -137,4 +137,13 @@ export const deleteReminder = (id) => api.delete(`/reminders/${id}`);
 // Sidebar badge counts
 export const getSidebarCounts = () => api.get('/sidebar/counts');
 
+// Email Config & Templates (Super Admin)
+export const getEmailConfig = () => api.get('/settings/email-config');
+export const updateEmailConfig = (data) => api.put('/settings/email-config', data);
+export const getEmailTemplates = () => api.get('/settings/email-templates');
+export const updateEmailTemplate = (id, data) => api.put(`/settings/email-templates/${id}`, data);
+export const previewEmailTemplate = (id) => api.post(`/settings/email-templates/${id}/preview`);
+export const testSendEmailTemplate = (id, toEmail) => api.post(`/settings/email-templates/${id}/test-send`, null, { params: { to_email: toEmail } });
+export const getEmailLogs = (limit = 50) => api.get('/settings/email-logs', { params: { limit } });
+
 export default api;

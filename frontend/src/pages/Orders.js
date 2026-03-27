@@ -61,7 +61,7 @@ const Orders = () => {
         <div className="bg-white rounded-lg border border-slate-200 p-4 mb-5">
           <div className="flex flex-wrap gap-3">
             <div className="flex-1 min-w-[200px] flex gap-2">
-              <Input placeholder="Search order #, customer, carrier..." value={searchInput}
+              <Input placeholder="Search order #, customer, phone, carrier, city..." value={searchInput}
                 onChange={e => setSearchInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} data-testid="search-orders" />
               <Button onClick={handleSearch} variant="outline"><Search className="w-4 h-4" /></Button>
             </div>

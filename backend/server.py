@@ -10,6 +10,7 @@ import asyncio
 import json
 import secrets
 import base64
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
@@ -20,6 +21,8 @@ from jose import JWTError, jwt
 import time
 from collections import defaultdict
 from distance_calc import estimate_distance, calculate_pricing
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Email, To, Content, HtmlContent
 
 
 ROOT_DIR = Path(__file__).parent
@@ -256,6 +259,131 @@ async def get_next_order_number():
         {"_id": "order_seq"}, {"$inc": {"seq": 1}}, return_document=True, upsert=True
     )
     return f"ORD{result['seq']:06d}"
+
+
+# ==================== EMAIL UTILITY ====================
+
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+DEFAULT_SENDER_EMAIL = os.getenv("SENDER_EMAIL", "info@breamway.com")
+
+DEFAULT_LEAD_APPROVED_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;padding:40px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+  <tr><td style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:32px 40px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:24px;">Breamway Auto Transport</h1>
+    <p style="color:#93c5fd;margin:6px 0 0;font-size:14px;">Your Vehicle Shipping Quote</p>
+  </td></tr>
+  <tr><td style="padding:32px 40px;">
+    <p style="color:#334155;font-size:16px;margin:0 0 8px;">Hello <strong>{{customer_name}}</strong>,</p>
+    <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0 0 24px;">Thank you for choosing Breamway Auto Transport. Your quote has been approved and is ready for your review.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;margin-bottom:24px;">
+      <tr><td style="padding:20px;">
+        <p style="color:#1e3a5f;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:0 0 16px;">Quote Details — {{quote_number}}</p>
+        <table width="100%" cellpadding="4" cellspacing="0">
+          <tr><td style="color:#64748b;font-size:13px;width:120px;">Vehicle:</td><td style="color:#1e293b;font-size:13px;font-weight:600;">{{vehicle}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;">Pickup:</td><td style="color:#1e293b;font-size:13px;">{{pickup_address}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;">Delivery:</td><td style="color:#1e293b;font-size:13px;">{{delivery_address}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;">Pickup Date:</td><td style="color:#1e293b;font-size:13px;">{{pickup_date}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;">Distance:</td><td style="color:#1e293b;font-size:13px;">{{distance}} miles</td></tr>
+        </table>
+      </td></tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:24px;">
+      <tr><td style="padding:20px;">
+        <p style="color:#1e3a5f;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;">Pricing Options</p>
+        <table width="100%" cellpadding="6" cellspacing="0">
+          <tr style="background:#dbeafe;"><td style="color:#1e3a5f;font-size:13px;font-weight:bold;border-radius:4px 0 0 4px;padding:10px;">Standard</td><td style="color:#1e3a5f;font-size:18px;font-weight:bold;text-align:right;border-radius:0 4px 4px 0;padding:10px;">${{price_standard}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;padding:10px;">Expedited</td><td style="color:#334155;font-size:16px;font-weight:600;text-align:right;padding:10px;">${{price_expedited}}</td></tr>
+          <tr><td style="color:#64748b;font-size:13px;padding:10px;">Enclosed</td><td style="color:#334155;font-size:16px;font-weight:600;text-align:right;padding:10px;">${{price_enclosed}}</td></tr>
+        </table>
+        <p style="color:#64748b;font-size:12px;margin:12px 0 0;">Deposit: ${{deposit}} &bull; Carrier Fee: ${{carrier_fee}}</p>
+      </td></tr>
+    </table>
+    <p style="color:#64748b;font-size:14px;line-height:1.6;">To proceed with booking, please reply to this email or call us directly. We look forward to shipping your vehicle safely and on time!</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+      <tr><td align="center">
+        <a href="tel:+1{{company_phone}}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:14px;font-weight:bold;">Call Us Now</a>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#f8fafc;padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+    <p style="color:#94a3b8;font-size:12px;margin:0;">{{company_name}} &bull; {{company_address}}</p>
+    <p style="color:#94a3b8;font-size:12px;margin:4px 0 0;">{{company_phone}} &bull; {{sender_email}}</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+
+
+async def send_crm_email(to_email: str, subject: str, html_body: str):
+    """Send an email via SendGrid using stored config or env defaults."""
+    if not SENDGRID_API_KEY:
+        logging.warning("SENDGRID_API_KEY not set, skipping email send")
+        return False
+    config = await db.settings.find_one({"_id": "email_config"})
+    sender = (config or {}).get("sender_email", DEFAULT_SENDER_EMAIL)
+    sender_name = (config or {}).get("sender_name", "Breamway Auto Transport")
+    try:
+        message = Mail(
+            from_email=Email(sender, sender_name),
+            to_emails=To(to_email),
+            subject=subject,
+            html_content=html_body
+        )
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        logging.info(f"Email sent to {to_email}: status={response.status_code}")
+        await db.email_logs.insert_one({
+            "to": to_email, "subject": subject, "status": response.status_code,
+            "sender": sender, "sent_at": datetime.now(timezone.utc).isoformat()
+        })
+        return response.status_code in (200, 201, 202)
+    except Exception as e:
+        logging.error(f"Email send failed: {e}")
+        await db.email_logs.insert_one({
+            "to": to_email, "subject": subject, "status": "error",
+            "error": str(e)[:500], "sent_at": datetime.now(timezone.utc).isoformat()
+        })
+        return False
+
+
+async def render_email_template(template_html: str, quote: dict) -> str:
+    """Replace {{placeholders}} in template with quote data."""
+    config = await db.settings.find_one({"_id": "email_config"})
+    company = await db.settings.find_one({"_id": "company_settings"})
+    c = company or {}
+    ec = config or {}
+    vehicle = " ".join(filter(None, [quote.get("vehicle_year", ""), quote.get("vehicle_make", ""), quote.get("vehicle_model", "")]))
+    std = quote.get("pricing_standard", {})
+    exp = quote.get("pricing_expedited", {})
+    enc = quote.get("pricing_enclosed", {})
+    replacements = {
+        "customer_name": quote.get("customer_name", "Valued Customer"),
+        "quote_number": quote.get("quote_number", ""),
+        "vehicle": vehicle or "N/A",
+        "pickup_address": quote.get("pickup_address", "") or f"{quote.get('pickup_city', '')}, {quote.get('pickup_state', '')}".strip(", "),
+        "delivery_address": quote.get("delivery_address", "") or f"{quote.get('delivery_city', '')}, {quote.get('delivery_state', '')}".strip(", "),
+        "pickup_date": quote.get("pickup_date", "TBD"),
+        "distance": str(quote.get("estimated_distance", "N/A")),
+        "price_standard": f"{std.get('total_price', quote.get('price', 0)):,.2f}",
+        "price_expedited": f"{exp.get('total_price', 0):,.2f}" if exp else "N/A",
+        "price_enclosed": f"{enc.get('total_price', 0):,.2f}" if enc else "N/A",
+        "deposit": f"{std.get('deposit_fee', quote.get('deposit_fee', 150)):,.2f}",
+        "carrier_fee": f"{std.get('carrier_fee', quote.get('carrier_fee', 60)):,.2f}",
+        "price": f"{quote.get('price', 0):,.2f}",
+        "company_name": c.get("name", ec.get("company_name", "Breamway Auto Transport")),
+        "company_address": c.get("address", ec.get("company_address", "277 Osgood Avenue, Houston, TX")),
+        "company_phone": c.get("phone", ec.get("company_phone", "")),
+        "sender_email": ec.get("sender_email", DEFAULT_SENDER_EMAIL),
+    }
+    result = template_html
+    for key, val in replacements.items():
+        result = result.replace("{{" + key + "}}", str(val))
+    return result
 
 
 # ==================== MODELS ====================
@@ -872,7 +1000,19 @@ async def approve_lead(
     }
     await db.quotes.update_one({"id": lead_id}, {"$set": update_data})
     updated = await db.quotes.find_one({"id": lead_id}, {"_id": 0})
-    return updated
+
+    # Send approval email to customer if email exists
+    customer_email = updated.get("email", "")
+    email_sent = False
+    if customer_email and "@" in customer_email:
+        tpl_doc = await db.settings.find_one({"_id": "email_template_lead_approved"})
+        template_html = (tpl_doc or {}).get("html", DEFAULT_LEAD_APPROVED_TEMPLATE)
+        subject_tpl = (tpl_doc or {}).get("subject", "Your Vehicle Transport Quote — {{quote_number}}")
+        rendered_html = await render_email_template(template_html, updated)
+        rendered_subject = await render_email_template(subject_tpl, updated)
+        email_sent = await send_crm_email(customer_email, rendered_subject, rendered_html)
+
+    return {**updated, "email_sent": email_sent}
 
 @api_router.get("/leads")
 async def get_leads(
@@ -896,10 +1036,12 @@ async def get_leads(
             {"quote_number": {"$regex": search, "$options": "i"}},
             {"customer_name": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}},
+            {"phone2": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
             {"pickup_city": {"$regex": search, "$options": "i"}},
             {"delivery_city": {"$regex": search, "$options": "i"}},
             {"vehicle_make": {"$regex": search, "$options": "i"}},
+            {"vehicle_model": {"$regex": search, "$options": "i"}},
         ]
         if "$or" in query:
             query = {"$and": [{"status": "lead"}, {"$or": query["$or"]}, {"$or": search_conds}]}
@@ -1179,11 +1321,13 @@ async def get_quotes(
             {"quote_number": {"$regex": search, "$options": "i"}},
             {"customer_name": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}},
+            {"phone2": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
             {"pickup_city": {"$regex": search, "$options": "i"}},
             {"delivery_city": {"$regex": search, "$options": "i"}},
             {"agent_name": {"$regex": search, "$options": "i"}},
             {"vehicle_make": {"$regex": search, "$options": "i"}},
+            {"vehicle_model": {"$regex": search, "$options": "i"}},
         ]
     total = await db.quotes.count_documents(query)
     quotes = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
@@ -1293,7 +1437,11 @@ async def get_orders(
             {"order_number": {"$regex": search, "$options": "i"}},
             {"customer_name": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}},
+            {"phone2": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
             {"carrier_name": {"$regex": search, "$options": "i"}},
+            {"pickup_city": {"$regex": search, "$options": "i"}},
+            {"delivery_city": {"$regex": search, "$options": "i"}},
         ]
     total = await db.orders.count_documents(query)
     orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
@@ -2470,6 +2618,106 @@ async def notification_stream(request: Request, token: str = ""):
         "Cache-Control": "no-cache", "Connection": "keep-alive",
         "X-Accel-Buffering": "no",  # Disable nginx buffering
     })
+
+
+# ==================== EMAIL TEMPLATE MANAGEMENT (SUPER ADMIN) ====================
+
+class EmailConfigInput(BaseModel):
+    sender_email: Optional[str] = None
+    sender_name: Optional[str] = None
+    company_name: Optional[str] = None
+    company_address: Optional[str] = None
+    company_phone: Optional[str] = None
+
+class EmailTemplateInput(BaseModel):
+    subject: str
+    html: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+@api_router.get("/settings/email-config")
+async def get_email_config(current_user: User = Depends(require_superadmin)):
+    config = await db.settings.find_one({"_id": "email_config"})
+    if not config:
+        return {"sender_email": DEFAULT_SENDER_EMAIL, "sender_name": "Breamway Auto Transport", "company_name": "Breamway Auto Transport", "company_address": "277 Osgood Avenue, Houston, TX", "company_phone": ""}
+    return {k: v for k, v in config.items() if k != "_id"}
+
+@api_router.put("/settings/email-config")
+async def update_email_config(data: EmailConfigInput, current_user: User = Depends(require_superadmin)):
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.settings.update_one({"_id": "email_config"}, {"$set": update}, upsert=True)
+    config = await db.settings.find_one({"_id": "email_config"})
+    return {k: v for k, v in config.items() if k != "_id"}
+
+@api_router.get("/settings/email-templates")
+async def get_email_templates(current_user: User = Depends(require_superadmin)):
+    templates = await db.settings.find({"_id": {"$regex": "^email_template_"}}).to_list(None)
+    result = []
+    for t in templates:
+        tid = t["_id"].replace("email_template_", "")
+        result.append({"id": tid, "name": t.get("name", tid), "subject": t.get("subject", ""), "html": t.get("html", ""), "description": t.get("description", "")})
+    # Add default if no lead_approved template exists
+    if not any(r["id"] == "lead_approved" for r in result):
+        result.insert(0, {"id": "lead_approved", "name": "Lead Approved / Quote Email", "subject": "Your Vehicle Transport Quote — {{quote_number}}", "html": DEFAULT_LEAD_APPROVED_TEMPLATE, "description": "Sent when a lead is approved and converted to a quote."})
+    return result
+
+@api_router.put("/settings/email-templates/{template_id}")
+async def update_email_template(template_id: str, data: EmailTemplateInput, current_user: User = Depends(require_superadmin)):
+    doc_id = f"email_template_{template_id}"
+    update = {"subject": data.subject, "html": data.html, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if data.name:
+        update["name"] = data.name
+    if data.description:
+        update["description"] = data.description
+    await db.settings.update_one({"_id": doc_id}, {"$set": update}, upsert=True)
+    return {"id": template_id, **update}
+
+@api_router.post("/settings/email-templates/{template_id}/preview")
+async def preview_email_template(template_id: str, current_user: User = Depends(require_superadmin)):
+    """Preview a template with sample data."""
+    doc_id = f"email_template_{template_id}"
+    tpl_doc = await db.settings.find_one({"_id": doc_id})
+    template_html = (tpl_doc or {}).get("html", DEFAULT_LEAD_APPROVED_TEMPLATE)
+    subject_tpl = (tpl_doc or {}).get("subject", "Your Vehicle Transport Quote — {{quote_number}}")
+    sample_quote = {
+        "customer_name": "John Smith", "quote_number": "BR000001",
+        "vehicle_year": "2024", "vehicle_make": "Toyota", "vehicle_model": "Camry",
+        "pickup_address": "Miami, FL", "delivery_address": "Dallas, TX",
+        "pickup_date": "04/15/2026", "estimated_distance": 1312,
+        "pricing_standard": {"total_price": 850, "deposit_fee": 150, "carrier_fee": 60},
+        "pricing_expedited": {"total_price": 1050}, "pricing_enclosed": {"total_price": 1250},
+        "price": 850, "deposit_fee": 150, "carrier_fee": 60,
+    }
+    rendered_html = await render_email_template(template_html, sample_quote)
+    rendered_subject = await render_email_template(subject_tpl, sample_quote)
+    return {"subject": rendered_subject, "html": rendered_html}
+
+@api_router.post("/settings/email-templates/{template_id}/test-send")
+async def test_send_email_template(template_id: str, to_email: str, current_user: User = Depends(require_superadmin)):
+    """Send a test email with sample data."""
+    doc_id = f"email_template_{template_id}"
+    tpl_doc = await db.settings.find_one({"_id": doc_id})
+    template_html = (tpl_doc or {}).get("html", DEFAULT_LEAD_APPROVED_TEMPLATE)
+    subject_tpl = (tpl_doc or {}).get("subject", "Your Vehicle Transport Quote — {{quote_number}}")
+    sample_quote = {
+        "customer_name": "John Smith", "quote_number": "BR000001",
+        "vehicle_year": "2024", "vehicle_make": "Toyota", "vehicle_model": "Camry",
+        "pickup_address": "Miami, FL", "delivery_address": "Dallas, TX",
+        "pickup_date": "04/15/2026", "estimated_distance": 1312,
+        "pricing_standard": {"total_price": 850, "deposit_fee": 150, "carrier_fee": 60},
+        "pricing_expedited": {"total_price": 1050}, "pricing_enclosed": {"total_price": 1250},
+        "price": 850, "deposit_fee": 150, "carrier_fee": 60,
+    }
+    rendered_html = await render_email_template(template_html, sample_quote)
+    rendered_subject = await render_email_template(subject_tpl, sample_quote)
+    sent = await send_crm_email(to_email, f"[TEST] {rendered_subject}", rendered_html)
+    return {"sent": sent, "to": to_email}
+
+@api_router.get("/settings/email-logs")
+async def get_email_logs(limit: int = 50, current_user: User = Depends(require_superadmin)):
+    logs = await db.email_logs.find({}, {"_id": 0}).sort("sent_at", -1).limit(limit).to_list(limit)
+    return logs
 
 
 # ==================== SIDEBAR BADGE COUNTS ====================

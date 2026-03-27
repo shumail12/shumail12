@@ -5,6 +5,8 @@ import {
   getLeadSources, getDistributionRules, upsertDistributionRule,
   deleteDistributionRule, getUsers, getQuotesAgents,
   getLeadEmail, regenerateLeadEmail,
+  getEmailConfig, updateEmailConfig, getEmailTemplates,
+  updateEmailTemplate, previewEmailTemplate, testSendEmailTemplate, getEmailLogs,
 } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,8 +19,261 @@ import { ScrollArea } from '../components/ui/scroll-area';
 import {
   Key, RefreshCw, Copy, Shield, BarChart3, Network,
   Trash2, Plus, AlertTriangle, CheckCircle, ExternalLink, Mail,
+  Send, Eye, FileEdit, Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// ==================== EMAIL SETTINGS PANEL ====================
+const EmailSettingsPanel = () => {
+  const [emailConfig, setEmailConfig] = useState({ sender_email: '', sender_name: '', company_name: '', company_address: '', company_phone: '' });
+  const [templates, setTemplates] = useState([]);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      const res = await getEmailConfig();
+      setEmailConfig(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await getEmailTemplates();
+      setTemplates(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await getEmailLogs(30);
+      setEmailLogs(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchConfig(); fetchTemplates(); fetchLogs(); }, [fetchConfig, fetchTemplates, fetchLogs]);
+
+  const handleSaveConfig = async () => {
+    setSaving(true);
+    try {
+      await updateEmailConfig(emailConfig);
+      toast.success('Email configuration saved');
+    } catch { toast.error('Failed to save config'); }
+    finally { setSaving(false); }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!editingTemplate) return;
+    setSaving(true);
+    try {
+      await updateEmailTemplate(editingTemplate.id, {
+        subject: editingTemplate.subject,
+        html: editingTemplate.html,
+        name: editingTemplate.name,
+        description: editingTemplate.description,
+      });
+      toast.success('Template saved');
+      fetchTemplates();
+    } catch { toast.error('Failed to save template'); }
+    finally { setSaving(false); }
+  };
+
+  const handlePreview = async (tplId) => {
+    try {
+      const res = await previewEmailTemplate(tplId);
+      setPreviewHtml(res.data.html);
+      setShowPreview(true);
+    } catch { toast.error('Failed to generate preview'); }
+  };
+
+  const handleTestSend = async (tplId) => {
+    if (!testEmail) { toast.error('Enter a test email address'); return; }
+    try {
+      await testSendEmailTemplate(tplId, testEmail);
+      toast.success(`Test email sent to ${testEmail}`);
+      fetchLogs();
+    } catch { toast.error('Failed to send test email'); }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Sender Configuration */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Mail className="w-5 h-5 text-blue-600" />
+          <h2 className="font-heading font-semibold text-slate-900 text-lg">Sender Configuration</h2>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">Configure the sender details for all outgoing CRM emails.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs font-medium text-slate-600">Sender Email</Label>
+            <Input value={emailConfig.sender_email || ''} onChange={e => setEmailConfig({...emailConfig, sender_email: e.target.value})}
+              placeholder="info@breamway.com" className="mt-1" data-testid="sender-email-input" />
+          </div>
+          <div>
+            <Label className="text-xs font-medium text-slate-600">Sender Name</Label>
+            <Input value={emailConfig.sender_name || ''} onChange={e => setEmailConfig({...emailConfig, sender_name: e.target.value})}
+              placeholder="Breamway Auto Transport" className="mt-1" data-testid="sender-name-input" />
+          </div>
+          <div>
+            <Label className="text-xs font-medium text-slate-600">Company Name</Label>
+            <Input value={emailConfig.company_name || ''} onChange={e => setEmailConfig({...emailConfig, company_name: e.target.value})}
+              placeholder="Breamway Auto Transport" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs font-medium text-slate-600">Company Phone</Label>
+            <Input value={emailConfig.company_phone || ''} onChange={e => setEmailConfig({...emailConfig, company_phone: e.target.value})}
+              placeholder="+1 (555) 000-0000" className="mt-1" />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs font-medium text-slate-600">Company Address</Label>
+            <Input value={emailConfig.company_address || ''} onChange={e => setEmailConfig({...emailConfig, company_address: e.target.value})}
+              placeholder="277 Osgood Avenue, Houston, TX" className="mt-1" />
+          </div>
+        </div>
+        <Button onClick={handleSaveConfig} disabled={saving} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-email-config-btn">
+          <Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save Configuration'}
+        </Button>
+      </div>
+
+      {/* Email Templates */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <FileEdit className="w-5 h-5 text-emerald-600" />
+          <h2 className="font-heading font-semibold text-slate-900 text-lg">Email Templates</h2>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">Edit the HTML templates used for customer emails. Use {'{{placeholders}}'} for dynamic data.</p>
+
+        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 mb-4">
+          <p className="text-xs font-semibold text-slate-700 mb-2">Available Placeholders:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {['customer_name','quote_number','vehicle','pickup_address','delivery_address','pickup_date','distance','price_standard','price_expedited','price_enclosed','deposit','carrier_fee','price','company_name','company_address','company_phone','sender_email'].map(p => (
+              <code key={p} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-mono">{`{{${p}}}`}</code>
+            ))}
+          </div>
+        </div>
+
+        {templates.map(tpl => (
+          <div key={tpl.id} className="border border-slate-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-semibold text-slate-900 text-sm">{tpl.name}</h3>
+                <p className="text-xs text-slate-500">{tpl.description}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => handlePreview(tpl.id)} data-testid={`preview-tpl-${tpl.id}`}>
+                  <Eye className="w-3.5 h-3.5 mr-1" />Preview
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setEditingTemplate({...tpl})} data-testid={`edit-tpl-${tpl.id}`}>
+                  <FileEdit className="w-3.5 h-3.5 mr-1" />Edit
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="Enter email to send test..." className="flex-1 text-sm" data-testid={`test-email-${tpl.id}`} />
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleTestSend(tpl.id)} data-testid={`send-test-${tpl.id}`}>
+                <Send className="w-3.5 h-3.5 mr-1" />Send Test
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Email Logs */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield className="w-5 h-5 text-slate-600" />
+          <h2 className="font-heading font-semibold text-slate-900 text-lg">Email Delivery Logs</h2>
+        </div>
+        {emailLogs.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-4">No emails sent yet</p>
+        ) : (
+          <ScrollArea className="h-64">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left">
+                  <th className="px-3 py-2 text-xs font-semibold text-slate-500">Time</th>
+                  <th className="px-3 py-2 text-xs font-semibold text-slate-500">To</th>
+                  <th className="px-3 py-2 text-xs font-semibold text-slate-500">Subject</th>
+                  <th className="px-3 py-2 text-xs font-semibold text-slate-500">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {emailLogs.map((log, i) => (
+                  <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-xs text-slate-500">{new Date(log.sent_at).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs text-slate-700">{log.to}</td>
+                    <td className="px-3 py-2 text-xs text-slate-700 max-w-[200px] truncate">{log.subject}</td>
+                    <td className="px-3 py-2">
+                      {log.status === 202 || log.status === 200 ? (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium">Sent</span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs font-medium">{log.error || log.status}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
+        )}
+      </div>
+
+      {/* Template Editor Dialog */}
+      <Dialog open={!!editingTemplate} onOpenChange={(open) => { if (!open) setEditingTemplate(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="template-editor-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit Email Template: {editingTemplate?.name}</DialogTitle>
+          </DialogHeader>
+          {editingTemplate && (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="text-xs font-medium text-slate-600">Template Name</Label>
+                <Input value={editingTemplate.name} onChange={e => setEditingTemplate({...editingTemplate, name: e.target.value})} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-slate-600">Email Subject Line</Label>
+                <Input value={editingTemplate.subject} onChange={e => setEditingTemplate({...editingTemplate, subject: e.target.value})} className="mt-1"
+                  placeholder="Your Vehicle Transport Quote — {{quote_number}}" data-testid="tpl-subject-input" />
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-slate-600">HTML Template Body</Label>
+                <textarea value={editingTemplate.html} onChange={e => setEditingTemplate({...editingTemplate, html: e.target.value})}
+                  className="w-full h-80 mt-1 p-3 border border-slate-200 rounded-lg font-mono text-xs resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  data-testid="tpl-html-textarea" />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditingTemplate(null)}>Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveTemplate} disabled={saving} data-testid="save-template-btn">
+              <Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="template-preview-dialog">
+          <DialogHeader>
+            <DialogTitle>Email Template Preview</DialogTitle>
+          </DialogHeader>
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <iframe srcDoc={previewHtml} title="Email Preview" className="w-full h-[500px] border-0" sandbox="" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPreview(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
 
 const AdminPanel = () => {
   const [apiKey, setApiKey] = useState('');
@@ -173,6 +428,9 @@ const AdminPanel = () => {
             </TabsTrigger>
             <TabsTrigger value="logs" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700" data-testid="tab-logs">
               <Shield className="w-4 h-4 mr-2" />API Logs
+            </TabsTrigger>
+            <TabsTrigger value="email" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700" data-testid="tab-email">
+              <Mail className="w-4 h-4 mr-2" />Email Settings
             </TabsTrigger>
           </TabsList>
 
@@ -509,6 +767,11 @@ Lead Source ID#: BR000000`}</pre>
                 </ScrollArea>
               )}
             </div>
+          </TabsContent>
+
+          {/* Email Settings Tab */}
+          <TabsContent value="email" className="space-y-6" data-testid="email-settings-content">
+            <EmailSettingsPanel />
           </TabsContent>
         </Tabs>
       </div>

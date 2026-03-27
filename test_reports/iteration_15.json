@@ -1,0 +1,127 @@
+{
+  "summary": "Iteration 15 testing completed for Email Settings Panel, Sidebar Badge Counts, Email Webhook, and Phone Search features. Backend: 18/18 tests passed. Frontend: All features verified working.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  
+  "passed_tests": {
+    "backend": [
+      "GET /api/sidebar/counts - returns new_leads and unread_chat counts",
+      "GET /api/sidebar/counts - requires authentication",
+      "POST /api/leads/email-webhook - creates lead from SendGrid form data (PUBLIC, no auth)",
+      "POST /api/leads/email-webhook - handles JSON body format",
+      "POST /api/leads/email-webhook - no auth required (public webhook)",
+      "GET /api/settings/email-config - returns sender configuration (superadmin only)",
+      "PUT /api/settings/email-config - updates sender configuration",
+      "GET /api/settings/email-config - requires superadmin auth",
+      "GET /api/settings/email-templates - returns list of templates including lead_approved",
+      "PUT /api/settings/email-templates/lead_approved - updates template HTML and subject",
+      "POST /api/settings/email-templates/lead_approved/preview - returns rendered HTML with sample data",
+      "GET /api/settings/email-logs - returns email delivery logs",
+      "GET /api/settings/email-logs - requires superadmin auth",
+      "GET /api/leads?search=phone - finds leads by phone number",
+      "GET /api/leads?search=phone2 - finds leads by alternate phone (phone2)",
+      "GET /api/quotes?search=555 - finds quotes by phone",
+      "GET /api/orders?search=555 - finds orders by phone",
+      "POST /api/settings/email-templates/lead_approved/test-send - sends test email via SendGrid"
+    ],
+    "frontend": [
+      "Sidebar shows red badge with count next to Leads nav item (badge-new_leads)",
+      "Sidebar shows Chat nav item (badge appears when unread messages exist)",
+      "Admin Panel has Email Settings tab (5th tab after API Logs)",
+      "Email Settings - Sender Configuration section with sender_email, sender_name, company fields",
+      "Email Settings - Save Configuration button works",
+      "Email Settings - Email Templates section shows lead_approved template",
+      "Email Settings - Available Placeholders displayed (customer_name, quote_number, vehicle, etc.)",
+      "Email Settings - Preview button opens Email Template Preview dialog with rendered HTML",
+      "Email Settings - Edit button opens Template Editor dialog with subject and HTML textarea",
+      "Email Settings - Test email input and Send Test button work",
+      "Email Settings - Email Delivery Logs table shows sent emails with Time, To, Subject, Status",
+      "Leads page - Phone search finds leads by phone number",
+      "Leads page - Phone search finds leads by phone2 (alternate phone)"
+    ]
+  },
+  
+  "test_report_links": [
+    "/app/backend/tests/test_iteration15_features.py",
+    "/app/test_reports/pytest/pytest_iteration15.xml"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [
+    "POST /api/leads/email-webhook is correctly PUBLIC (no auth) for SendGrid Inbound Parse integration",
+    "Email webhook correctly parses key:value pairs from plain text body including phone2 field",
+    "GET /api/sidebar/counts correctly returns new_leads (unseen leads) and unread_chat counts",
+    "Email config and template endpoints correctly require superadmin role",
+    "Phone search in leads/quotes/orders correctly searches both phone and phone2 fields",
+    "Email template preview correctly renders placeholders with sample data",
+    "SendGrid integration is LIVE (not mocked) - test emails are actually sent",
+    "Layout.js correctly renders red badge with animate-pulse for new_leads and unread_chat counts",
+    "NotificationContext.js correctly fetches sidebar counts and handles chat_message SSE events"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_iteration15_features.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "100% (all critical flows working)"
+  },
+  
+  "test_credentials": {
+    "username": "shumail.s",
+    "password": "HONDA@2026",
+    "security_answer": "Shark",
+    "role": "superadmin"
+  },
+  
+  "seed_data_creation": "Test leads created via email webhook with TEST_ prefix for phone search testing",
+  
+  "retest_needed": false,
+  
+  "should_main_agent_self_test": true,
+  
+  "context_for_next_testing_agent": "Iteration 15 tested: 1) Sidebar badge counts - GET /api/sidebar/counts returns new_leads and unread_chat, displayed as red badges in Layout.js. 2) Email webhook - POST /api/leads/email-webhook is PUBLIC (no auth) for SendGrid Inbound Parse, parses key:value format including phone2. 3) Email Settings Panel in Admin Panel (5th tab) - sender config (GET/PUT /api/settings/email-config), template editor (GET/PUT /api/settings/email-templates), preview (POST .../preview), test send (POST .../test-send), and email logs (GET /api/settings/email-logs). 4) Phone search - leads/quotes/orders search endpoints now search both phone and phone2 fields. SendGrid is LIVE with real API key - emails are actually sent.",
+  
+  "features_verified": {
+    "sidebar_badge_counts": {
+      "endpoint": "GET /api/sidebar/counts",
+      "returns": {"new_leads": "count of unseen leads", "unread_chat": "count of unread chat messages"},
+      "frontend": "Red badges with animate-pulse shown next to Leads and Chat nav items"
+    },
+    "email_webhook": {
+      "endpoint": "POST /api/leads/email-webhook",
+      "auth": "PUBLIC - no authentication required",
+      "purpose": "SendGrid Inbound Parse webhook for email-to-lead conversion",
+      "parses": "key:value pairs from plain text including Name, Phone, Phone 2, Pickup/Delivery City/State/Zip, Year/Make/Model"
+    },
+    "email_settings_panel": {
+      "location": "Admin Panel > Email Settings tab (5th tab)",
+      "sender_config": "GET/PUT /api/settings/email-config - sender_email, sender_name, company_name, company_address, company_phone",
+      "templates": "GET /api/settings/email-templates - returns list with lead_approved template",
+      "template_update": "PUT /api/settings/email-templates/{id} - updates subject and html",
+      "template_preview": "POST /api/settings/email-templates/{id}/preview - renders with sample data",
+      "test_send": "POST /api/settings/email-templates/{id}/test-send - sends via SendGrid",
+      "email_logs": "GET /api/settings/email-logs - returns delivery logs with to, subject, status, sent_at"
+    },
+    "phone_search": {
+      "leads": "GET /api/leads?search=phone searches both phone and phone2 fields",
+      "quotes": "GET /api/quotes?search=phone searches both phone and phone2 fields",
+      "orders": "GET /api/orders?search=phone searches both phone and phone2 fields"
+    }
+  },
+  
+  "mocked_apis": {
+    "note": "No mocked APIs - SendGrid is LIVE with real API key configured in backend/.env"
+  }
+}
